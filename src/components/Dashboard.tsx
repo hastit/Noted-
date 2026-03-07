@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { BookOpen, Sparkles, Play, Calendar as CalendarIcon, Zap, ArrowRight, MoreVertical } from 'lucide-react';
+import { BookOpen, Sparkles, Play, Calendar as CalendarIcon, Zap, ArrowRight, PenLine } from 'lucide-react';
 import { MOCK_NOTEBOOKS } from '../constants';
 import { CalendarDayView } from './CalendarDayView';
 import { CalendarEvent, Tag } from '../types';
@@ -22,125 +22,218 @@ export default function Dashboard({ events, tags, onNavigate }: DashboardProps) 
     if (hour < 12) setGreeting(t('good_morning'));
     else if (hour < 18) setGreeting(t('good_afternoon'));
     else setGreeting(t('good_evening'));
-
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
   }, [t]);
 
   const recentNotebooks = MOCK_NOTEBOOKS.slice(0, 4);
+  const todayStr = currentTime.toISOString().split('T')[0];
+  const todayEvents = events.filter(e => e.date === todayStr);
 
   return (
-    <div className="h-full flex flex-col gap-8 overflow-y-auto no-scrollbar pb-12">
-      {/* Header Section */}
-      <div className="flex items-end justify-between shrink-0 pt-4">
+    <div className="h-full flex flex-col gap-8 overflow-y-auto no-scrollbar pb-8">
+
+      {/* ── Header ── */}
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="flex items-end justify-between pt-2 shrink-0"
+      >
         <div>
-          <h1 className="text-4xl font-bold tracking-tight mb-1">
-            {greeting}, Alex <span className="inline-block animate-bounce-slow">✨</span>
-          </h1>
-          <p className="text-muted text-sm font-medium">
-            {currentTime.toLocaleDateString(language === '日本語' ? 'ja-JP' : language === 'Español' ? 'es-ES' : 'en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          <p className="text-xs font-semibold text-black/30 uppercase tracking-[0.18em] mb-1">
+            {currentTime.toLocaleDateString(language === '日本語' ? 'ja-JP' : 'en-US', {
+              weekday: 'long', month: 'long', day: 'numeric'
+            })}
           </p>
+          <h1 className="text-3xl font-bold tracking-tight text-black">
+            {greeting}, Alex
+          </h1>
         </div>
-        <div className="flex gap-3">
-          <button className="pill-button flex items-center gap-2">
-            <Play size={14} className="fill-current" />
+
+        <div className="flex items-center gap-2 mb-1">
+          <button
+            onClick={() => onNavigate('notes')}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-black/[0.04] hover:bg-black/[0.07] text-black/60 hover:text-black transition-all text-xs font-semibold"
+          >
+            <PenLine size={14} />
+            New note
+          </button>
+          <button
+            onClick={() => onNavigate('tasks')}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white transition-all text-xs font-semibold shadow-sm shadow-blue-900/20"
+          >
+            <Play size={14} />
             {t('start_focus')}
           </button>
         </div>
-      </div>
+      </motion.div>
 
-      {/* Bento Grid Layout */}
-      <div className="bento-grid flex-1">
-        
-        {/* Today's Agenda - Large Card */}
-        <div className="col-span-12 lg:col-span-5 row-span-6 bento-card bg-surface">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-ink">
-                <CalendarIcon size={16} />
-              </div>
-              <h3 className="text-lg font-bold">{t('today_agenda')}</h3>
-            </div>
-            <button 
-              onClick={() => onNavigate('calendar')}
-              className="text-xs font-bold text-muted hover:text-ink transition-colors"
-            >
-              {t('view_all')}
-            </button>
-          </div>
+      {/* ── Main grid ── */}
+      <div className="grid grid-cols-12 gap-5 flex-1 min-h-0">
 
-          <div className="flex-1 overflow-hidden">
-            <CalendarDayView 
-              events={events}
-              tags={tags}
-              currentDate={currentTime}
-              compact={true}
-            />
-          </div>
-        </div>
-
-        {/* Recent Notebooks - Grid of Small Cards */}
-        <div className="col-span-12 lg:col-span-7 row-span-4 bento-card bg-canvas border border-black/5">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-bold">{t('recent_notebooks')}</h3>
-            <button 
-              onClick={() => onNavigate('notes')}
-              className="text-xs font-bold text-muted hover:text-ink transition-colors"
-            >
-              {t('view_library')}
-            </button>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {recentNotebooks.map((notebook, i) => (
-              <motion.div
-                key={notebook.id}
-                whileHover={{ y: -4 }}
-                onClick={() => onNavigate('notes', notebook.id)}
-                className="group cursor-pointer"
-              >
-                <div 
-                  className="aspect-square rounded-2xl mb-3 shadow-sm group-hover:shadow-md transition-all duration-300 flex items-center justify-center relative overflow-hidden"
-                  style={{ backgroundColor: notebook.color }}
-                >
-                  <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  <BookOpen size={24} className="text-ink/20" />
+        {/* Today's Agenda */}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.08 }}
+          className="col-span-4 flex flex-col min-h-0"
+        >
+          <div className="flex flex-col h-full rounded-2xl bg-white border border-black/[0.06] shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-black/[0.05]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-[#dbeafe] flex items-center justify-center">
+                  <CalendarIcon size={14} className="text-[#1d4ed8]" />
                 </div>
-                <h4 className="text-sm font-bold truncate">{notebook.title}</h4>
-                <p className="text-[10px] font-bold text-muted uppercase tracking-widest mt-0.5">
-                  {notebook.notesCount} {t('pages')}
+                <span className="text-sm font-semibold text-black">{t('today_agenda')}</span>
+              </div>
+              {todayEvents.length > 0 && (
+                <span className="text-[10px] font-bold text-[#1d4ed8] bg-[#dbeafe] px-2 py-0.5 rounded-full">
+                  {todayEvents.length} events
+                </span>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-hidden p-3">
+              <CalendarDayView
+                events={events}
+                tags={tags}
+                currentDate={currentTime}
+                compact={true}
+              />
+            </div>
+
+            <div className="px-4 pb-4">
+              <button
+                onClick={() => onNavigate('calendar')}
+                className="w-full py-2.5 rounded-xl border border-black/[0.08] text-xs font-semibold text-black/40 hover:text-black hover:border-black/20 transition-all flex items-center justify-center gap-1.5"
+              >
+                {t('open_calendar')}
+                <ArrowRight size={11} />
+              </button>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Right column */}
+        <div className="col-span-8 flex flex-col gap-5 min-h-0">
+
+          {/* Recent Notebooks */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.13 }}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-black">{t('recent_notebooks')}</h2>
+              <button
+                onClick={() => onNavigate('notes')}
+                className="flex items-center gap-1 text-xs font-semibold text-[#1d4ed8] hover:text-[#1e3a8a] transition-colors"
+              >
+                {t('view_library')}
+                <ArrowRight size={11} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-4 gap-3">
+              {recentNotebooks.map((notebook, i) => (
+                <motion.div
+                  key={notebook.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: 0.18 + i * 0.06 }}
+                  whileHover={{ y: -3, transition: { duration: 0.15 } }}
+                  onClick={() => onNavigate('notes', notebook.id)}
+                  className="cursor-pointer group"
+                >
+                  <div
+                    className="rounded-2xl relative overflow-hidden flex flex-col justify-between p-5 border border-black/[0.06] shadow-sm hover:shadow-md transition-all"
+                    style={{ backgroundColor: notebook.color, aspectRatio: '4/5' }}
+                  >
+                    <div className="absolute top-0 left-0 w-3 h-full bg-black/[0.04]" />
+
+                    <div className="relative z-10 pl-1">
+                      <div className="w-7 h-7 rounded-lg bg-white/50 flex items-center justify-center mb-3">
+                        <BookOpen size={13} className="text-black/40" />
+                      </div>
+                      <h4 className="font-semibold text-sm leading-tight text-black line-clamp-2">
+                        {notebook.title}
+                      </h4>
+                    </div>
+
+                    <p className="relative z-10 pl-1 text-[9px] font-semibold text-black/30 uppercase tracking-wider">
+                      {t('two_hours_ago')}
+                    </p>
+
+                    <div className="absolute bottom-3 right-3 w-6 h-6 rounded-lg bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
+                      <ArrowRight size={11} color="white" />
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+
+          {/* Inspiration card */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.28 }}
+            className="flex-1 rounded-2xl overflow-hidden relative border border-black/[0.06] shadow-sm"
+            style={{
+              background: 'linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 60%, #3b82f6 100%)',
+            }}
+          >
+            <svg className="absolute inset-0 w-full h-full opacity-[0.06] pointer-events-none" viewBox="0 0 600 200">
+              {[20, 60, 100, 140, 180].map((y, i) => (
+                <path key={i}
+                  d={`M 0 ${y} C 120 ${y - 14}, 280 ${y + 14}, 400 ${y} C 500 ${y - 10}, 560 ${y + 8}, 600 ${y}`}
+                  fill="none" stroke="white" strokeWidth="1"
+                />
+              ))}
+            </svg>
+
+            <div className="relative z-10 p-7 flex flex-col h-full justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <Sparkles size={13} className="text-blue-200/60" />
+                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-200/60">
+                    Daily Inspiration
+                  </span>
+                </div>
+                <p className="text-lg font-semibold text-white leading-snug max-w-lg">
+                  "{t('quote')}"
                 </p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
+                <p className="text-xs font-semibold text-white/40 mt-3 uppercase tracking-widest">
+                  {t('author')}
+                </p>
+              </div>
 
-        {/* Quick Capture - Medium Card */}
-        <div className="col-span-12 lg:col-span-4 row-span-2 bento-card bg-ink text-white">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
-              <Zap size={16} />
+              <div
+                className="flex items-center gap-3 mt-5 p-4 rounded-xl"
+                style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(8px)' }}
+              >
+                <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
+                  <Zap size={15} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 mb-0.5">
+                    {t('productivity_tip')}
+                  </p>
+                  <p className="text-xs font-medium text-white/70 leading-snug">
+                    {t('tip_text')}
+                  </p>
+                </div>
+              </div>
             </div>
-            <h3 className="text-lg font-bold">{t('quick_capture')}</h3>
-          </div>
-          <p className="text-sm text-white/60 mb-6">Capture your thoughts instantly.</p>
-          <button className="w-full py-3 bg-white text-ink rounded-pill font-bold text-xs uppercase tracking-widest hover:bg-white/90 transition-colors">
-            {t('new_quick_note')}
-          </button>
-        </div>
 
-        {/* Daily Inspiration - Medium Card */}
-        <div className="col-span-12 lg:col-span-3 row-span-2 bento-card bg-surface">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-ink">
-              <Sparkles size={16} />
-            </div>
-            <h3 className="text-lg font-bold">{t('inspiration')}</h3>
-          </div>
-          <p className="text-sm font-medium italic leading-relaxed text-ink/70">
-            "The beautiful thing about learning is that no one can take it away from you."
-          </p>
-        </div>
+            <div
+              className="absolute top-[-40%] right-[-10%] w-72 h-72 rounded-full blur-3xl pointer-events-none"
+              style={{ background: 'rgba(96, 165, 250, 0.15)' }}
+            />
+          </motion.div>
 
+        </div>
       </div>
     </div>
   );

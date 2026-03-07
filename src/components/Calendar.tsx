@@ -77,65 +77,60 @@ export default function Calendar({ events, tags, onEventsChange, onTagsChange }:
   };
 
   return (
-    <div className="h-full flex flex-col gap-8">
+    <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-end justify-between mb-12 pt-4">
-        <div>
-          <h1 className="text-5xl font-bold tracking-tight mb-2 uppercase">
-            {monthYearLabel}
-          </h1>
-          <p className="text-muted text-sm font-bold uppercase tracking-widest opacity-60">{t('calendar_subtitle') || 'Your schedule at a glance'}</p>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-display font-bold tracking-tight">
+          {monthYearLabel}
+        </h1>
+
+        {/* View Toggle */}
+        <div className="bg-black/5 p-1 rounded-2xl flex items-center gap-1 backdrop-blur-md">
+          {(['month', 'week', 'day'] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`px-6 py-2 rounded-xl text-sm font-medium transition-all duration-300 capitalize ${
+                view === v ? 'bg-white shadow-sm text-black' : 'text-black/40 hover:text-black/60'
+              }`}
+            >
+              {v === 'month' ? t('month') : v === 'week' ? t('week') : t('day')}
+            </button>
+          ))}
         </div>
 
-        <div className="flex items-center gap-8">
-          {/* View Toggle */}
-          <div className="bg-surface/50 p-1.5 rounded-pill flex items-center gap-1 border border-black/5 shadow-inner">
-            {(['month', 'week', 'day'] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                className={`px-6 py-2.5 rounded-pill text-[10px] font-bold transition-all duration-300 uppercase tracking-[0.2em] ${
-                  view === v ? 'bg-ink shadow-xl text-canvas scale-105' : 'text-muted hover:text-ink/60'
-                }`}
-              >
-                {v === 'month' ? t('month') : v === 'week' ? t('week') : t('day')}
-              </button>
-            ))}
-          </div>
-
-          {/* Navigation */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => handleNavigate('prev')}
-                className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center hover:bg-black/5 transition-all border border-black/5 shadow-sm hover:shadow-md active:scale-95"
-              >
-                <ChevronLeft size={20} />
-              </button>
-              <button 
-                onClick={() => setCurrentDate(new Date())}
-                className="h-12 px-6 bg-white rounded-2xl font-bold text-[10px] uppercase tracking-[0.2em] hover:bg-black/5 transition-all border border-black/5 shadow-sm hover:shadow-md active:scale-95"
-              >
-                {t('today')}
-              </button>
-              <button 
-                onClick={() => handleNavigate('next')}
-                className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center hover:bg-black/5 transition-all border border-black/5 shadow-sm hover:shadow-md active:scale-95"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </div>
+        {/* Navigation */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 mr-4">
             <button 
-              onClick={() => {
-                setSelectedSlot({ date: formatDate(currentDate), time: 540 });
-                setIsModalOpen(true);
-              }}
-              className="px-8 h-12 bg-ink text-canvas rounded-pill flex items-center gap-3 hover:scale-105 transition-transform font-bold text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-black/10"
+              onClick={() => handleNavigate('prev')}
+              className="p-2 glass-panel rounded-xl hover:bg-black/5 transition-colors"
             >
-              <Plus size={20} />
-              <span>{t('add_event')}</span>
+              <ChevronLeft size={20} />
+            </button>
+            <button 
+              onClick={() => setCurrentDate(new Date())}
+              className="px-6 py-2 glass-panel rounded-xl font-bold text-sm hover:bg-black/5 transition-colors"
+            >
+              {t('today')}
+            </button>
+            <button 
+              onClick={() => handleNavigate('next')}
+              className="p-2 glass-panel rounded-xl hover:bg-black/5 transition-colors"
+            >
+              <ChevronRight size={20} />
             </button>
           </div>
+          <button 
+            onClick={() => {
+              setSelectedSlot({ date: formatDate(currentDate), time: 540 });
+              setIsModalOpen(true);
+            }}
+            className="flex items-center gap-2 px-6 py-3 bg-black text-white rounded-2xl font-medium hover:scale-105 transition-transform"
+          >
+            <Plus size={18} />
+            <span>{t('add_event')}</span>
+          </button>
         </div>
       </div>
 
@@ -149,7 +144,7 @@ export default function Calendar({ events, tags, onEventsChange, onTagsChange }:
               tags={tags} 
               currentDate={currentDate}
               onSelectSlot={(date) => {
-                setSelectedSlot({ date, time: 540 });
+                setSelectedSlot({ date, time: 540 }); // Default to 9 AM (9 * 60)
                 setIsModalOpen(true);
               }}
             />
@@ -235,15 +230,15 @@ const MonthView: React.FC<MonthViewProps> = ({ events, tags, currentDate, onSele
   return (
     <motion.div 
       ref={scrollContainerRef}
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 1.02 }}
-      className="h-full bg-surface/30 rounded-[48px] overflow-y-auto no-scrollbar border border-black/5 shadow-inner relative scroll-smooth"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="h-full bg-white rounded-[32px] overflow-y-auto no-scrollbar border border-black/5 shadow-xl relative scroll-smooth"
     >
       {/* Global Sticky Weekday Header */}
-      <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-black/5 grid grid-cols-7">
+      <div className="sticky top-0 z-30 bg-white border-b border-black/5 grid grid-cols-7">
         {weekDays.map(day => (
-          <div key={day} className="py-4 text-center text-[10px] font-bold text-muted uppercase tracking-[0.3em]">
+          <div key={day} className="py-4 text-center text-[10px] font-bold text-black/30 uppercase tracking-widest">
             {day}
           </div>
         ))}
@@ -263,17 +258,17 @@ const MonthView: React.FC<MonthViewProps> = ({ events, tags, currentDate, onSele
             className="mb-12 last:mb-0"
           >
             {/* Month Title Header (Sticky below weekdays) */}
-            <div className="sticky top-[49px] z-20 bg-white/60 backdrop-blur-lg px-10 py-4 border-b border-black/5">
-              <h2 className="text-2xl font-bold text-ink uppercase tracking-tight">
+            <div className="sticky top-[45px] z-20 bg-white/90 backdrop-blur-md px-8 py-4 border-b border-black/5">
+              <h2 className="text-xl font-display font-bold text-black">
                 {monthDate.toLocaleString(language === '日本語' ? 'ja-JP' : 'default', { month: 'long', year: 'numeric' })}
               </h2>
             </div>
 
             {/* Calendar Grid */}
-            <div className="grid grid-cols-7 px-4">
+            <div className="grid grid-cols-7">
               {/* Empty slots for the first week */}
               {Array.from({ length: firstDayOfMonth }).map((_, i) => (
-                <div key={`empty-${i}`} className="aspect-square border-r border-b border-black/5 bg-transparent" />
+                <div key={`empty-${i}`} className="aspect-square border-r border-b border-black/5 bg-black/[0.01]" />
               ))}
 
               {/* Days of the month */}
@@ -289,20 +284,20 @@ const MonthView: React.FC<MonthViewProps> = ({ events, tags, currentDate, onSele
                   <div
                     key={dayNumber}
                     onClick={() => onSelectSlot(dateStr)}
-                    className={`relative border-r border-b border-black/5 p-4 flex flex-col transition-all hover:bg-white hover:shadow-xl hover:z-10 hover:rounded-3xl cursor-pointer group aspect-square min-h-[140px] ${
+                    className={`relative border-r border-b border-black/5 p-4 flex flex-col transition-colors hover:bg-black/[0.02] cursor-pointer group aspect-square min-h-[140px] ${
                       (firstDayOfMonth + dayNumber) % 7 === 0 ? 'border-r-0' : ''
-                    } ${isSelectedMonthDay ? 'bg-white/50' : ''}`}
+                    } ${isSelectedMonthDay ? 'bg-black/[0.01]' : ''}`}
                   >
                     <div className="flex justify-between items-start mb-3">
-                      <span className={`text-sm font-bold ${isToday ? 'text-ink' : 'text-muted opacity-40'}`}>
-                        {dayNumber.toString().padStart(2, '0')}
+                      <span className={`text-sm font-bold ${isToday ? 'text-[#FF5C35]' : 'text-black/60'}`}>
+                        {dayNumber}
                       </span>
                       <div className="flex items-center gap-2">
                         {isToday && (
-                          <div className="w-2 h-2 rounded-full bg-ink shadow-lg shadow-black/20" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#FF5C35]" />
                         )}
-                        <div className="opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100">
-                          <Plus size={16} className="text-ink" />
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Plus size={14} className="text-black/40" />
                         </div>
                       </div>
                     </div>
@@ -314,7 +309,7 @@ const MonthView: React.FC<MonthViewProps> = ({ events, tags, currentDate, onSele
                         return (
                           <div 
                             key={event.id} 
-                            className={`px-3 py-1.5 rounded-xl text-[10px] font-bold truncate border border-black/5 shadow-sm hover:scale-105 transition-transform ${tag?.color || 'bg-surface'} ${tag?.textColor || 'text-ink'}`}
+                            className={`px-3 py-1.5 rounded-xl text-[10px] font-bold truncate shadow-sm ${tag?.color || 'bg-black/5'} ${tag?.textColor || 'text-black'}`}
                           >
                             {event.title}
                           </div>
@@ -327,14 +322,13 @@ const MonthView: React.FC<MonthViewProps> = ({ events, tags, currentDate, onSele
 
               {/* Empty slots to fill the last week */}
               {Array.from({ length: (7 - ((firstDayOfMonth + daysInMonth) % 7)) % 7 }).map((_, i) => (
-                <div key={`empty-end-${i}`} className="aspect-square border-r border-b border-black/5 bg-transparent last:border-r-0" />
+                <div key={`empty-end-${i}`} className="aspect-square border-r border-b border-black/5 bg-black/[0.01] last:border-r-0" />
               ))}
             </div>
           </div>
         );
       })}
     </motion.div>
-
   );
 };
 
@@ -385,42 +379,42 @@ const WeekView: React.FC<WeekViewProps> = ({
 
   return (
     <motion.div 
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 1.02 }}
-      className="h-full flex flex-col bg-surface/30 rounded-[48px] p-8 border border-black/5 shadow-inner"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="h-full flex flex-col"
     >
       {/* Week Header */}
       <div className="grid grid-cols-[100px_1fr] mb-8">
         <div className="flex items-center justify-center">
-          <div className="w-14 h-14 rounded-3xl bg-white flex items-center justify-center border border-black/5 shadow-sm">
-            <CalendarIcon size={24} className="text-ink/40" />
+          <div className="w-12 h-12 rounded-2xl glass-panel flex items-center justify-center">
+            <CalendarIcon size={20} className="text-black/40" />
           </div>
         </div>
         <div className="grid grid-cols-7 gap-4">
           {weekDays.map((day) => (
             <div 
               key={day.date}
-              className={`flex flex-col items-center justify-center py-6 rounded-[24px] transition-all duration-500 ${
-                day.active ? 'bg-ink text-canvas shadow-2xl scale-105 z-10' : 'bg-white text-muted border border-black/5 shadow-sm'
+              className={`flex flex-col items-center justify-center py-5 rounded-[32px] transition-all duration-500 ${
+                day.active ? 'bg-[#1a1a1a] text-white shadow-2xl scale-105' : 'bg-[#f4f4f4] text-black/60'
               }`}
             >
-              <span className={`text-[10px] font-bold uppercase tracking-[0.3em] mb-2 ${day.active ? 'text-canvas/50' : 'text-muted opacity-60'}`}>
-                {day.name.substring(0, 3)}
+              <span className={`text-[11px] font-bold uppercase tracking-widest mb-2 ${day.active ? 'text-white/50' : 'text-black/30'}`}>
+                {day.name}
               </span>
-              <span className="text-3xl font-bold tracking-tighter">{day.date.toString().padStart(2, '0')}</span>
+              <span className="text-3xl font-display font-bold">{day.date}</span>
             </div>
           ))}
         </div>
       </div>
 
       {/* Time Grid */}
-      <div className="flex-1 overflow-y-auto no-scrollbar relative rounded-[32px] bg-white/50 border border-black/5">
-        <div className="grid grid-cols-[100px_1fr] min-h-[1440px] relative">
+      <div className="flex-1 overflow-y-auto no-scrollbar relative px-4">
+        <div className="grid grid-cols-[100px_1fr] min-h-[1000px] relative">
           {/* Time Labels */}
-          <div className="flex flex-col border-r border-black/5 bg-white/30">
+          <div className="flex flex-col">
             {hours.map((hour) => (
-              <div key={hour} className="h-[60px] text-[10px] font-bold text-muted flex items-start justify-center pt-4 uppercase tracking-widest opacity-40">
+              <div key={hour} className="h-[100px] text-[13px] font-bold text-black/30 flex items-start justify-center pt-2">
                 {formatHourLabel(hour)}
               </div>
             ))}
@@ -431,7 +425,7 @@ const WeekView: React.FC<WeekViewProps> = ({
             {/* Background Grid Lines */}
             <div className="absolute inset-0 pointer-events-none">
               {hours.map((hour) => (
-                <div key={hour} className="h-[60px] border-b border-black/5 w-full" />
+                <div key={hour} className="h-[100px] border-b border-black/5 w-full" />
               ))}
             </div>
             
@@ -443,30 +437,30 @@ const WeekView: React.FC<WeekViewProps> = ({
                   <div 
                     key={hour} 
                     onClick={() => onSelectSlot(day.fullDate, hour)}
-                    className="h-[60px] hover:bg-black/[0.02] transition-colors cursor-pointer"
+                    className="h-[100px] hover:bg-black/[0.02] transition-colors cursor-pointer"
                   />
                 ))}
 
                 {/* Events for this day */}
                 {events.filter(e => e.date === day.fullDate).map((event) => {
                   const tag = tags.find(t => t.id === event.tagId);
-                  const top = (event.startTime / 60) * 60;
-                  const height = ((event.endTime - event.startTime) / 60) * 60;
+                  const top = (event.startTime / 60) * 100;
+                  const height = ((event.endTime - event.startTime) / 60) * 100;
                   
                   return (
                     <div 
                       key={event.id}
-                      className={`absolute left-1.5 right-1.5 rounded-2xl p-4 shadow-xl flex flex-col overflow-hidden group hover:scale-[1.02] hover:z-50 transition-all duration-300 cursor-pointer border border-black/5 ${tag?.color || 'bg-surface'} ${tag?.textColor || 'text-ink'}`}
+                      className={`absolute left-2 right-2 rounded-[28px] p-5 shadow-sm flex flex-col overflow-hidden group hover:scale-[1.02] transition-all duration-300 cursor-pointer z-10 ${tag?.color || 'bg-black/10'} ${tag?.textColor || 'text-black'}`}
                       style={{ top: `${top}px`, height: `${height}px` }}
                     >
-                      <div className="mb-1">
-                        <h4 className="font-bold text-xs leading-tight mb-1 uppercase tracking-tight">{event.title}</h4>
-                        <p className="text-[9px] opacity-70 font-bold uppercase tracking-[0.2em]">
-                          {formatTime(event.startTime)}
+                      <div className="mb-2">
+                        <h4 className="font-bold text-[13px] leading-tight mb-1">{event.title}</h4>
+                        <p className="text-[11px] opacity-70 font-medium">
+                          {formatTime(event.startTime)} - {formatTime(event.endTime)}
                         </p>
                       </div>
                       {event.location && (
-                        <div className="mt-auto flex items-center gap-2 text-[8px] opacity-60 font-bold uppercase tracking-[0.2em]">
+                        <div className="mt-auto flex items-center gap-1 text-[10px] opacity-60">
                           <MapPin size={10} />
                           {event.location}
                         </div>
@@ -481,7 +475,7 @@ const WeekView: React.FC<WeekViewProps> = ({
       </div>
     </motion.div>
   );
-};
+}
 
 function AddEventModal({ 
   onClose, 
@@ -519,23 +513,6 @@ function AddEventModal({
 
   const endTime = startTime + duration;
 
-  const timeOptions = useMemo(() => {
-    const opts = [];
-    for (let i = 0; i < 24 * 4; i++) {
-      opts.push(i * 15);
-    }
-    return opts;
-  }, []);
-
-  const durationOptions = [
-    { label: '1', value: 1 },
-    { label: '15', value: 15 },
-    { label: '30', value: 30 },
-    { label: '45', value: 45 },
-    { label: '1h', value: 60 },
-    { label: '1.5h', value: 90 },
-  ];
-
   // Initial scroll to center the selected time
   React.useEffect(() => {
     if (isAdvanced && timeRollerRef.current && !isScrolling) {
@@ -556,6 +533,7 @@ function AddEventModal({
     const newTime = timeOptions[index];
     
     if (newTime !== undefined && newTime !== startTime) {
+      // Small delay to ensure the user has actually landed on the time
       if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
       scrollTimeoutRef.current = setTimeout(() => {
         setStartTime(newTime);
@@ -590,8 +568,264 @@ function AddEventModal({
     setIsCreatingTag(false);
   };
 
-  const selectedTag = tags.find(t => t.id === selectedTagId);
-  const headerColor = selectedTag ? selectedTag.color.replace('bg-', '') : '#000000';
+  const timeOptions = useMemo(() => {
+    const opts = [];
+    for (let i = 0; i < 24 * 4; i++) {
+      opts.push(i * 15);
+    }
+    return opts;
+  }, []);
+
+  const durationOptions = [
+    { label: '1', value: 1 },
+    { label: '15', value: 15 },
+    { label: '30', value: 30 },
+    { label: '45', value: 45 },
+    { label: '1h', value: 60 },
+    { label: '1.5h', value: 90 },
+  ];
+
+  if (isAdvanced) {
+    const selectedTag = tags.find(t => t.id === selectedTagId);
+    const headerColor = selectedTag ? selectedTag.color.replace('bg-', '') : '#FF8A80';
+    
+    return (
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/20 backdrop-blur-sm"
+        onClick={onClose}
+      >
+        <motion.div 
+          initial={{ scale: 0.9, opacity: 0, y: 20 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          className="w-full max-w-md bg-white rounded-[40px] overflow-hidden shadow-2xl max-h-[90vh] flex flex-col border border-black/5"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Header Section */}
+          <div 
+            className="p-8 relative shrink-0 transition-colors duration-500"
+            style={{ backgroundColor: headerColor.startsWith('#') ? headerColor : undefined }}
+          >
+            {/* If it's a tailwind class, we use the class, otherwise the inline style */}
+            {!headerColor.startsWith('#') && <div className={`absolute inset-0 ${selectedTag?.color}`} />}
+            
+            <div className="relative z-10">
+              <button 
+                onClick={onClose}
+                className="w-10 h-10 rounded-full bg-black/10 flex items-center justify-center text-white hover:bg-black/20 transition-colors"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="mt-8 flex items-center gap-6">
+                <div className="w-16 h-16 rounded-full bg-white/30 backdrop-blur-md flex items-center justify-center text-white shrink-0 shadow-sm border border-white/20">
+                  <Languages size={28} />
+                </div>
+                <div className="flex-1 relative">
+                  <p className="text-white/80 text-[11px] font-bold mb-1 uppercase tracking-wider">{formatTimeRange()}</p>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="text"
+                      placeholder={t('event_title')}
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      className="w-full bg-transparent border-b-2 border-white/40 text-2xl font-bold text-white placeholder:text-white/60 focus:outline-none focus:border-white transition-colors py-1"
+                    />
+                    <div className="w-6 h-6 rounded-full border-2 border-white/40 flex items-center justify-center shrink-0">
+                      <div className="w-2 h-2 rounded-full bg-white" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Body Section */}
+          <div className="p-6 space-y-8 overflow-y-auto no-scrollbar flex-1 bg-white">
+            {/* Date Selector */}
+            <div className="bg-gray-50 rounded-3xl p-5 flex items-center justify-between group cursor-pointer hover:bg-gray-100 transition-all border border-black/[0.03]">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-2xl bg-white shadow-sm flex items-center justify-center">
+                  <CalendarIcon size={18} className="text-[#FF8A80]" />
+                </div>
+                <span className="text-black font-bold">
+                  {new Date(date).toLocaleDateString(language === '日本語' ? 'ja-JP' : 'default', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-black/30 text-[11px] font-bold uppercase tracking-wider">
+                {t('today')} <ChevronRight size={14} />
+              </div>
+            </div>
+
+            {/* Time Roller */}
+            <div>
+              <div className="flex items-center justify-between mb-4 px-2">
+                <h4 className="text-black/40 text-xs font-bold uppercase tracking-widest">{t('time')}</h4>
+                <button className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-black/20 hover:text-black/40 transition-colors">
+                  <MoreHorizontal size={14} />
+                </button>
+              </div>
+              <div className="relative">
+                <div 
+                  ref={timeRollerRef}
+                  onScroll={handleScroll}
+                  className="bg-gray-50 rounded-[32px] h-64 overflow-y-auto no-scrollbar relative border border-black/[0.03] snap-y snap-mandatory"
+                  style={{
+                    maskImage: 'linear-gradient(to bottom, transparent, black 20%, black 80%, transparent)',
+                    WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 20%, black 80%, transparent)'
+                  }}
+                >
+                  <div className="py-24 relative z-10">
+                    {timeOptions.map((t) => {
+                      const isSelected = startTime === t;
+                      let displayTimeLabel = formatTime(t);
+                      
+                      // Day rollover logic
+                      const totalMinutes = t + (t > startTime ? duration : 0);
+                      const isNextDay = totalMinutes >= 1440;
+                      
+                      if (isSelected) {
+                        displayTimeLabel = `${formatTime(t)} – ${formatTime(t + duration)}`;
+                      } else if (t > startTime) {
+                        displayTimeLabel = formatTime(t + duration);
+                      }
+
+                      if (isNextDay && !isSelected) {
+                        displayTimeLabel += "⁺¹";
+                      }
+
+                      return (
+                        <motion.button
+                          key={t}
+                          data-time={t}
+                          type="button"
+                          initial={false}
+                          animate={{
+                            scale: isSelected ? 1 : 0.85,
+                            opacity: isSelected ? 1 : 0.3,
+                            backgroundColor: isSelected ? '#FF8A80' : 'transparent',
+                            color: isSelected ? '#ffffff' : '#000000',
+                          }}
+                          transition={{ type: 'spring', stiffness: 80, damping: 15, mass: 1 }}
+                          onClick={() => {
+                            setStartTime(t);
+                            const el = timeRollerRef.current?.querySelector(`[data-time="${t}"]`);
+                            el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                          }}
+                          className={`w-[90%] mx-auto h-[52px] flex items-center justify-center rounded-full snap-center shrink-0 outline-none transition-shadow ${isSelected ? 'shadow-lg shadow-[#FF8A80]/30' : ''}`}
+                        >
+                          <span className={`font-bold transition-all duration-500 ${isSelected ? 'text-lg' : 'text-sm'}`}>
+                            {displayTimeLabel}
+                          </span>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {/* Visual Guide - matching the new pill shape */}
+                <div className="absolute top-1/2 -translate-y-1/2 left-[5%] right-[5%] h-[52px] border-2 border-[#FF8A80]/5 rounded-full pointer-events-none z-0" />
+              </div>
+            </div>
+
+            {/* Duration Selector */}
+            <div>
+              <div className="flex items-center justify-between mb-4 px-2">
+                <h4 className="text-black/40 text-xs font-bold uppercase tracking-widest">{t('duration')}</h4>
+                <button className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-black/20 hover:text-black/40 transition-colors">
+                  <MoreHorizontal size={14} />
+                </button>
+              </div>
+              <div className="bg-gray-50 rounded-full p-1.5 flex gap-1 border border-black/[0.03]">
+                {durationOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setDuration(opt.value)}
+                    className={`flex-1 py-3 rounded-full text-sm font-bold transition-all duration-300 ${duration === opt.value ? 'bg-[#FF8A80] text-white shadow-md' : 'text-black/30 hover:text-black/50 hover:bg-black/5'}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Tags Selector */}
+            <div>
+              <div className="flex items-center justify-between mb-4 px-2">
+                <h4 className="text-black/40 text-xs font-bold uppercase tracking-widest">{t('tags')}</h4>
+                <button 
+                  type="button"
+                  onClick={() => setIsCreatingTag(!isCreatingTag)}
+                  className="text-[11px] font-bold text-[#FF8A80] uppercase tracking-widest hover:opacity-80 transition-opacity"
+                >
+                  {isCreatingTag ? t('cancel') : `+ ${t('new_tag')}`}
+                </button>
+              </div>
+
+              {isCreatingTag ? (
+                <div className="bg-gray-50 p-4 rounded-3xl space-y-3 border border-black/[0.03]">
+                  <input 
+                    type="text" 
+                    value={newTagName}
+                    onChange={e => setNewTagName(e.target.value)}
+                    placeholder={t('tag_name')}
+                    className="w-full bg-white border-none outline-none rounded-xl px-4 py-2 text-sm placeholder:text-black/20 focus:ring-2 ring-[#FF8A80]/20 transition-all"
+                  />
+                  <div className="flex items-center justify-between">
+                    <div className="flex gap-1.5">
+                      {PRESET_COLORS.map((color, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setNewTagColorIndex(i)}
+                          className={`w-6 h-6 rounded-full ${color.bg} flex items-center justify-center transition-all ${newTagColorIndex === i ? 'ring-2 ring-black scale-110' : 'hover:scale-105'}`}
+                        >
+                          {newTagColorIndex === i && <Check size={12} className={color.text} />}
+                        </button>
+                      ))}
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={handleCreateTag}
+                      className="px-4 py-1.5 bg-black text-white rounded-lg text-[10px] font-bold hover:scale-105 transition-transform"
+                    >
+                      {t('save')}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {tags.map((tag) => (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      onClick={() => setSelectedTagId(tag.id)}
+                      className={`px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-300 ${selectedTagId === tag.id ? `${tag.color} ${tag.textColor} shadow-md scale-105` : 'bg-gray-50 text-black/40 hover:bg-gray-100 border border-black/[0.03]'}`}
+                    >
+                      {tag.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Action Button */}
+            <div className="pt-4">
+              <button 
+                type="button"
+                onClick={() => handleSubmit()}
+                className="w-full py-5 bg-black text-white rounded-[32px] font-bold text-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-xl shadow-black/10"
+              >
+                {t('save_label')}
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div 
@@ -604,214 +838,122 @@ function AddEventModal({
       <motion.div 
         initial={{ scale: 0.9, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-white rounded-[40px] overflow-hidden shadow-2xl max-h-[90vh] flex flex-col border border-black/5"
+        className="w-full max-w-md bg-white rounded-[40px] p-8 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar"
         onClick={e => e.stopPropagation()}
       >
-        {/* Header Section */}
-        <div 
-          className="p-8 relative shrink-0 transition-colors duration-500"
-          style={{ backgroundColor: headerColor.startsWith('#') ? headerColor : undefined }}
-        >
-          {/* If it's a tailwind class, we use the class, otherwise the inline style */}
-          {!headerColor.startsWith('#') && <div className={`absolute inset-0 ${selectedTag?.color}`} />}
-          
-          <div className="relative z-10">
-            <div className="flex justify-between items-center mb-6">
-              <button 
-                onClick={onClose}
-                className="w-10 h-10 rounded-xl bg-black/10 flex items-center justify-center text-white hover:bg-black/20 transition-colors"
-              >
-                <X size={20} />
-              </button>
-              <div className="px-4 py-1.5 rounded-pill bg-white/20 backdrop-blur-md border border-white/20 text-[10px] font-bold text-white uppercase tracking-widest">
-                {isAdvanced ? t('advanced_event') : t('new_event')}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-6">
-              <div className="w-16 h-16 rounded-2xl bg-white/30 backdrop-blur-md flex items-center justify-center text-white shrink-0 shadow-sm border border-white/20">
-                <CalendarIcon size={28} />
-              </div>
-              <div className="flex-1 relative">
-                <p className="text-white/80 text-[10px] font-bold mb-1 uppercase tracking-widest">{formatTimeRange()}</p>
-                <div className="flex items-center gap-2">
-                  <input 
-                    type="text"
-                    placeholder={t('event_title')}
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="w-full bg-transparent border-b-2 border-white/40 text-2xl font-bold text-white placeholder:text-white/60 focus:outline-none focus:border-white transition-colors py-1"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="flex justify-between items-center mb-8">
+          <h2 className="text-2xl font-display font-bold">{t('add_event')}</h2>
+          <button onClick={onClose} className="w-10 h-10 rounded-full bg-black/5 flex items-center justify-center hover:bg-black/10 transition-colors">
+            <X size={20} />
+          </button>
         </div>
 
-        {/* Body Section */}
-        <div className="p-8 space-y-8 overflow-y-auto no-scrollbar flex-1 bg-canvas">
-          {/* Date Selector */}
-          <div className="bg-surface rounded-2xl p-5 flex items-center justify-between group cursor-pointer hover:bg-black/5 transition-all border border-black/5">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-canvas shadow-sm flex items-center justify-center border border-black/5">
-                <CalendarIcon size={18} className="text-ink" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-ink font-bold text-sm">
-                  {new Date(date).toLocaleDateString(language === '日本語' ? 'ja-JP' : 'default', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-                </span>
-                <input 
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="absolute inset-0 opacity-0 cursor-pointer"
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2 text-muted text-[10px] font-bold uppercase tracking-widest">
-              {t('change')} <ChevronRight size={14} />
-            </div>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label className="text-[10px] font-bold text-black/30 uppercase tracking-widest mb-2 block">{t('title')}</label>
+            <input 
+              type="text"
+              placeholder={t('event_title')}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full bg-black/5 rounded-2xl px-6 py-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-black/5 transition-all"
+            />
           </div>
 
-          {/* Time Roller */}
-          <div>
-            <div className="flex items-center justify-between mb-4 px-2">
-              <h4 className="text-muted text-[10px] font-bold uppercase tracking-widest">{t('time')}</h4>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-[10px] font-bold text-black/30 uppercase tracking-widest mb-2 block">{t('date')}</label>
+              <input 
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full bg-black/5 rounded-2xl px-4 py-4 text-sm font-medium focus:outline-none"
+              />
             </div>
-            <div className="relative">
-              <div 
-                ref={timeRollerRef}
-                onScroll={handleScroll}
-                className="bg-surface rounded-card h-64 overflow-y-auto no-scrollbar relative border border-black/5 snap-y snap-mandatory"
-                style={{
-                  maskImage: 'linear-gradient(to bottom, transparent, black 20%, black 80%, transparent)',
-                  WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 20%, black 80%, transparent)'
-                }}
+            <div>
+              <label className="text-[10px] font-bold text-black/30 uppercase tracking-widest mb-2 block">{t('start_time')}</label>
+              <select 
+                value={startTime}
+                onChange={(e) => setStartTime(Number(e.target.value))}
+                className="w-full bg-black/5 rounded-2xl px-4 py-4 text-sm font-medium focus:outline-none appearance-none"
               >
-                <div className="py-24 relative z-10">
-                  {timeOptions.map((t) => {
-                    const isSelected = startTime === t;
-                    let displayTimeLabel = formatTime(t);
-                    
-                    const totalMinutes = t + (t > startTime ? duration : 0);
-                    const isNextDay = totalMinutes >= 1440;
-                    
-                    if (isSelected) {
-                      displayTimeLabel = `${formatTime(t)} – ${formatTime(t + duration)}`;
-                    } else if (t > startTime) {
-                      displayTimeLabel = formatTime(t + duration);
-                    }
-
-                    if (isNextDay && !isSelected) {
-                      displayTimeLabel += "⁺¹";
-                    }
-
-                    return (
-                      <motion.button
-                        key={t}
-                        data-time={t}
-                        type="button"
-                        initial={false}
-                        animate={{
-                          scale: isSelected ? 1 : 0.85,
-                          opacity: isSelected ? 1 : 0.3,
-                          backgroundColor: isSelected ? '#000000' : 'transparent',
-                          color: isSelected ? '#ffffff' : '#000000',
-                        }}
-                        transition={{ type: 'spring', stiffness: 80, damping: 15, mass: 1 }}
-                        onClick={() => {
-                          setStartTime(t);
-                          const el = timeRollerRef.current?.querySelector(`[data-time="${t}"]`);
-                          el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                        }}
-                        className={`w-[90%] mx-auto h-[52px] flex items-center justify-center rounded-pill snap-center shrink-0 outline-none transition-shadow ${isSelected ? 'shadow-lg shadow-black/20' : ''}`}
-                      >
-                        <span className={`font-bold transition-all duration-500 ${isSelected ? 'text-base' : 'text-xs'}`}>
-                          {displayTimeLabel}
-                        </span>
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="absolute top-1/2 -translate-y-1/2 left-[5%] right-[5%] h-[52px] border-2 border-black/5 rounded-pill pointer-events-none z-0" />
+                {timeOptions.map((t) => (
+                  <option key={t} value={t}>{formatTime(t)}</option>
+                ))}
+              </select>
             </div>
           </div>
 
-          {/* Duration Selector */}
           <div>
-            <div className="flex items-center justify-between mb-4 px-2">
-              <h4 className="text-muted text-[10px] font-bold uppercase tracking-widest">{t('duration')}</h4>
-            </div>
-            <div className="bg-surface rounded-pill p-1.5 flex gap-1 border border-black/5">
-              {durationOptions.map((opt) => (
+            <label className="text-[10px] font-bold text-black/30 uppercase tracking-widest mb-2 block">{t('duration')}</label>
+            <div className="flex gap-1.5">
+              {[15, 30, 45, 60, 90, 120].map((d) => (
                 <button
-                  key={opt.value}
+                  key={d}
                   type="button"
-                  onClick={() => setDuration(opt.value)}
-                  className={`flex-1 py-3 rounded-pill text-[10px] font-bold uppercase tracking-widest transition-all duration-300 ${duration === opt.value ? 'bg-ink text-canvas shadow-md' : 'text-muted hover:text-ink/60 hover:bg-black/5'}`}
+                  onClick={() => setDuration(d)}
+                  className={`flex-1 py-2.5 rounded-xl text-[10px] font-bold transition-all ${duration === d ? 'bg-black text-white' : 'bg-black/5 text-black/40 hover:bg-black/10'}`}
                 >
-                  {opt.label}
+                  {d >= 60 ? `${d/60}h` : `${d}m`}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Tags Selector */}
           <div>
-            <div className="flex items-center justify-between mb-4 px-2">
-              <h4 className="text-muted text-[10px] font-bold uppercase tracking-widest">{t('tags')}</h4>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-[10px] font-bold text-black/30 uppercase tracking-widest block">{t('tags')}</label>
               <button 
                 type="button"
                 onClick={() => setIsCreatingTag(!isCreatingTag)}
-                className="text-[10px] font-bold text-ink uppercase tracking-widest hover:opacity-80 transition-opacity"
+                className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest hover:text-indigo-600 transition-colors"
               >
                 {isCreatingTag ? t('cancel') : `+ ${t('new_tag')}`}
               </button>
             </div>
-
+            
             {isCreatingTag ? (
-              <div className="bg-surface p-5 rounded-card space-y-4 border border-black/5">
+              <div className="bg-black/5 p-4 rounded-[24px] space-y-3 border border-black/5">
                 <input 
                   type="text" 
                   value={newTagName}
                   onChange={e => setNewTagName(e.target.value)}
                   placeholder={t('tag_name')}
-                  className="w-full bg-canvas border border-black/5 outline-none rounded-xl px-4 py-3 text-sm placeholder:text-muted focus:ring-2 ring-black/5 transition-all"
+                  className="w-full bg-white border-none outline-none rounded-xl px-4 py-2 text-sm placeholder:text-black/20 focus:ring-2 ring-black/5 transition-all"
                 />
                 <div className="flex items-center justify-between">
-                  <div className="flex gap-2">
+                  <div className="flex gap-1.5">
                     {PRESET_COLORS.map((color, i) => (
                       <button
                         key={i}
                         type="button"
                         onClick={() => setNewTagColorIndex(i)}
-                        className={`w-7 h-7 rounded-full ${color.bg} flex items-center justify-center transition-all ${newTagColorIndex === i ? 'ring-2 ring-ink scale-110' : 'hover:scale-105'}`}
+                        className={`w-6 h-6 rounded-full ${color.bg} flex items-center justify-center transition-all ${newTagColorIndex === i ? 'ring-2 ring-black scale-110' : 'hover:scale-105'}`}
                       >
-                        {newTagColorIndex === i && <Check size={14} className={color.text} />}
+                        {newTagColorIndex === i && <Check size={12} className={color.text} />}
                       </button>
                     ))}
                   </div>
                   <button 
                     type="button"
                     onClick={handleCreateTag}
-                    className="px-5 py-2 bg-ink text-canvas rounded-xl text-[10px] font-bold uppercase tracking-widest hover:scale-105 transition-transform"
+                    className="px-4 py-1.5 bg-black text-white rounded-lg text-[10px] font-bold hover:scale-105 transition-transform"
                   >
-                    {t('save')}
+                    {t('save_label')}
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {tags.map((tag) => (
+              <div className="flex flex-wrap gap-1.5">
+                {tags.map(tag => (
                   <button
                     key={tag.id}
                     type="button"
                     onClick={() => setSelectedTagId(tag.id)}
-                    className={`px-4 py-2 rounded-pill text-[10px] font-bold uppercase tracking-widest transition-all border border-black/5 ${
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
                       selectedTagId === tag.id 
-                        ? `${tag.color} ${tag.textColor} ring-2 ring-ink ring-offset-2` 
-                        : 'bg-surface text-muted hover:text-ink hover:bg-black/5'
+                        ? `${tag.color} ${tag.textColor} ring-2 ring-black/5 scale-105` 
+                        : 'bg-black/5 text-black/40 hover:bg-black/10'
                     }`}
                   >
                     {tag.name}
@@ -821,31 +963,13 @@ function AddEventModal({
             )}
           </div>
 
-          {/* Location Input */}
-          <div>
-            <div className="flex items-center justify-between mb-4 px-2">
-              <h4 className="text-muted text-[10px] font-bold uppercase tracking-widest">{t('location')}</h4>
-            </div>
-            <div className="relative">
-              <MapPin size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" />
-              <input 
-                type="text"
-                placeholder={t('add_location')}
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                className="w-full bg-surface border border-black/5 outline-none rounded-pill px-12 py-4 text-sm placeholder:text-muted focus:ring-2 ring-black/5 transition-all"
-              />
-            </div>
-          </div>
-
-          {/* Submit Button */}
           <button 
-            onClick={() => handleSubmit()}
-            className="w-full py-5 bg-ink text-canvas rounded-pill font-bold uppercase tracking-[0.2em] shadow-xl shadow-black/10 hover:scale-[1.02] transition-transform mt-4"
+            type="submit"
+            className="w-full py-4 bg-black text-white rounded-2xl font-bold text-base hover:bg-black/90 active:scale-95 transition-all shadow-lg"
           >
             {t('create_event')}
           </button>
-        </div>
+        </form>
       </motion.div>
     </motion.div>
   );

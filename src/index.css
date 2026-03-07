@@ -1,60 +1,29 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&family=Satoshi:wght@300;400;500;700&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Satoshi", "Inter", sans-serif;
   
-  --color-canvas: #ffffff;
-  --color-ink: #000000;
-  --color-muted: #8e8e93;
-  --color-surface: #f2f2f7;
-  --color-accent: #000000;
+  --color-glass-bg: rgba(255, 255, 255, 0.7);
+  --color-glass-border: rgba(255, 255, 255, 0.3);
   
-  --radius-pill: 9999px;
-  --radius-card: 24px;
+  --radius-glass: 24px;
 }
 
 @layer base {
   body {
-    @apply bg-canvas text-ink font-sans antialiased;
+    @apply bg-[#fdfdfd] text-[#1a1a1a] font-sans antialiased overflow-hidden;
     min-height: 100vh;
   }
-
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-sans font-bold tracking-tight;
-  }
 }
 
-.dock-container {
-  @apply fixed bottom-8 left-1/2 -translate-x-1/2 z-50;
+.glass-panel {
+  @apply bg-white/70 backdrop-blur-xl border border-white/30 shadow-sm;
 }
 
-.dock {
-  @apply flex items-center gap-1 p-2 bg-white/80 backdrop-blur-xl border border-black/5 rounded-pill shadow-2xl;
-}
-
-.dock-item {
-  @apply flex items-center justify-center w-12 h-12 rounded-pill transition-all duration-200 text-muted hover:text-ink hover:bg-surface;
-}
-
-.dock-item-active {
-  @apply bg-ink text-white hover:bg-ink hover:text-white;
-}
-
-.bento-grid {
-  @apply grid grid-cols-12 gap-4 auto-rows-[100px];
-}
-
-.bento-card {
-  @apply bg-surface rounded-card p-6 flex flex-col justify-between transition-all duration-300 hover:scale-[1.01] hover:shadow-lg;
-}
-
-.pill-button {
-  @apply px-6 py-3 bg-ink text-white rounded-pill font-semibold text-sm transition-all hover:opacity-90 active:scale-95;
-}
-
-.pill-button-secondary {
-  @apply px-6 py-3 bg-surface text-ink rounded-pill font-semibold text-sm transition-all hover:bg-black/5 active:scale-95;
+.glass-card {
+  @apply bg-white/40 backdrop-blur-md border border-white/20 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)];
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -64,4 +33,19 @@
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Minimalist thin lines */
+.thin-border {
+  border-width: 0.5px;
+  @apply border-black/5;
+}
+
+/* Smooth scroll snap for time roller */
+.snap-y-mandatory {
+  scroll-snap-type: y mandatory;
+}
+
+.snap-center {
+  scroll-snap-align: center;
 }

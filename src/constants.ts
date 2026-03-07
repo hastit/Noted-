@@ -41,10 +41,10 @@ export const MOCK_TASKS: Task[] = [
 ];
 
 export const MOCK_NOTEBOOKS: Notebook[] = [
-  { id: 'nb1', title: 'Mathematics', color: '#DDE6FF', folderId: 'f1', createdAt: '2026-02-10', lastUsedAt: '2026-02-28', notesCount: 12 },
-  { id: 'nb2', title: 'History', color: '#FFF9E7', folderId: 'f1', createdAt: '2026-02-12', lastUsedAt: '2026-02-27', notesCount: 8 },
-  { id: 'nb3', title: 'Biology', color: '#D9FFF3', folderId: 'f2', createdAt: '2026-02-15', lastUsedAt: '2026-02-25', notesCount: 15 },
-  { id: 'nb4', title: 'Literature', color: '#FFD9DC', folderId: 'f2', createdAt: '2026-02-20', lastUsedAt: '2026-02-28', notesCount: 4 },
+  { id: 'nb1', title: 'Mathematics', color: '#DDE6FF', folderId: 'f1', createdAt: '2026-02-10', lastUsedAt: '2026-02-28' },
+  { id: 'nb2', title: 'History', color: '#FFF9E7', folderId: 'f1', createdAt: '2026-02-12', lastUsedAt: '2026-02-27' },
+  { id: 'nb3', title: 'Biology', color: '#D9FFF3', folderId: 'f2', createdAt: '2026-02-15', lastUsedAt: '2026-02-25' },
+  { id: 'nb4', title: 'Literature', color: '#FFD9DC', folderId: 'f2', createdAt: '2026-02-20', lastUsedAt: '2026-02-28' },
 ];
 
 export const MOCK_NOTES: Note[] = [

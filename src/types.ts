@@ -26,7 +26,6 @@ export interface Notebook {
   folderId?: string;
   createdAt: string;
   lastUsedAt: string;
-  notesCount?: number;
 }
 
 export interface QuickNote {

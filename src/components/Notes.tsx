@@ -4,6 +4,7 @@ import { Plus, Check, Folder, Search, MoreVertical, Book, ChevronRight, ChevronD
 import { MOCK_NOTEBOOKS, MOCK_FOLDERS, MOCK_NOTES, MOCK_QUICK_NOTES } from '../constants';
 import { Notebook, Folder as FolderType, Note, PDFFile, QuickNote } from '../types';
 import { useLanguage } from '../context/LanguageContext';
+import { useLanguage } from '../context/LanguageContext';
 
 const NOTEBOOK_COLORS = [
   '#DDE6FF', '#FFF9E7', '#D9FFF3', '#FFD9DC', '#E8D9FF', '#F4F4F4'
@@ -434,206 +435,212 @@ export default function Notes({
   }, [selectedNotebook, notes]);
 
   return (
-    <div className="h-full flex flex-col gap-10">
+    <div className="h-full flex flex-col">
       <AnimatePresence mode="wait">
         {!selectedFolder ? (
           <motion.div
             key="main-view"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
             className="flex flex-col h-full"
           >
-            <div className="flex items-end justify-between mb-12 pt-4 shrink-0">
+            <div className="flex items-center justify-between mb-8">
               <div>
-                <h1 className="text-5xl font-bold tracking-tight mb-2 uppercase">{t('notes_title')}</h1>
-                <p className="text-muted text-sm font-bold uppercase tracking-widest opacity-60">{t('notes_subtitle')}</p>
+                <h1 className="text-3xl font-display font-bold tracking-tight">{t('notes_title')}</h1>
+                <p className="text-black/40 text-sm mt-1">{t('notes_subtitle')}</p>
               </div>
-              <div className="flex gap-4">
-                <div className="bg-surface px-8 py-4 rounded-pill flex items-center gap-4 border border-black/5 shadow-sm focus-within:ring-2 ring-black/5 transition-all">
-                  <Search size={20} className="text-muted" />
+              <div className="flex gap-3">
+                <div className="glass-panel px-4 py-2 rounded-2xl flex items-center gap-2">
+                  <Search size={18} className="text-black/20" />
                   <input 
                     type="text" 
                     placeholder={t('search_notes')} 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="bg-transparent border-none outline-none text-sm w-64 placeholder:text-muted font-bold uppercase tracking-widest"
+                    className="bg-transparent border-none outline-none text-sm w-48 placeholder:text-black/20"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto no-scrollbar space-y-12 pb-12">
+            <div className="flex-1 overflow-y-auto no-scrollbar space-y-12">
               {/* Recent Folders */}
               <section>
-                <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-3xl font-bold tracking-tight uppercase">{t('recent_folders')}</h2>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-display font-bold">{t('recent_folders')}</h2>
                 </div>
-                <div className="flex gap-10 mb-10 border-b border-black/5">
+                <div className="flex gap-8 mb-8 border-b border-black/5">
                   {(['todays', 'week', 'month'] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setFolderTab(tab)}
-                      className={`pb-5 text-[11px] font-bold uppercase tracking-[0.3em] transition-all relative ${
-                        folderTab === tab ? 'text-ink' : 'text-muted hover:text-ink/60'
+                      className={`pb-4 text-sm font-bold uppercase tracking-widest transition-all relative ${
+                        folderTab === tab ? 'text-black' : 'text-black/20 hover:text-black/40'
                       }`}
                     >
                       {tab === 'todays' ? t('todays') : tab === 'week' ? t('this_week') : t('this_month')}
                       {folderTab === tab && (
                         <motion.div 
                           layoutId="folderTabUnderline"
-                          className="absolute bottom-0 left-0 right-0 h-[3px] bg-ink rounded-full"
+                          className="absolute bottom-0 left-0 right-0 h-0.5 bg-black"
                         />
                       )}
                     </button>
                   ))}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+                <div className="grid grid-cols-4 gap-6">
                   {filterByTab(folders, folderTab).map((folder) => (
                     <motion.div 
                       key={folder.id}
-                      whileHover={{ y: -8, scale: 1.02 }}
+                      whileHover={{ y: -5 }}
                       onClick={() => setSelectedFolder(folder)}
-                      className="p-8 rounded-card bg-surface cursor-pointer group relative overflow-hidden flex flex-col justify-between aspect-[1.3/1] border border-black/5 shadow-sm hover:shadow-xl hover:shadow-black/5 transition-all"
+                      className="p-6 rounded-[32px] shadow-sm cursor-pointer group relative overflow-hidden flex flex-col justify-between aspect-[1.4/1]"
+                      style={{ backgroundColor: folder.color || '#F4F4F4' }}
                     >
                       <div className="flex justify-between items-start">
-                        <div className="w-14 h-14 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-black/5 group-hover:scale-110 transition-transform">
-                          <Folder size={24} className="text-ink" />
+                        <div className="w-12 h-12 rounded-2xl bg-white/40 flex items-center justify-center">
+                          <Folder size={24} className="text-black/60" />
                         </div>
-                        <button className="p-2 text-muted hover:text-ink transition-colors opacity-0 group-hover:opacity-100">
+                        <button className="p-2 text-black/20 hover:text-black/40">
                           <MoreVertical size={20} />
                         </button>
                       </div>
                       <div>
-                        <h4 className="text-2xl font-bold mb-2 tracking-tight">{folder.title}</h4>
-                        <p className="text-[10px] font-bold text-muted uppercase tracking-[0.2em] opacity-60">
-                          {new Date(folder.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        <h4 className="font-display font-bold text-xl mb-1">{folder.title}</h4>
+                        <p className="text-[10px] font-bold text-black/30 uppercase tracking-widest">
+                          {new Date(folder.createdAt).toLocaleDateString()}
                         </p>
                       </div>
                     </motion.div>
                   ))}
                   <button 
                     onClick={() => setIsCreatingFolder(true)}
-                    className="rounded-card border-2 border-dashed border-black/10 flex flex-col items-center justify-center gap-4 text-muted hover:text-ink hover:border-black/20 transition-all aspect-[1.3/1] bg-surface/30 group"
+                    className="rounded-[32px] border-2 border-dashed border-black/5 flex flex-col items-center justify-center gap-3 text-black/20 hover:text-black/40 hover:border-black/10 transition-all aspect-[1.4/1]"
                   >
-                    <div className="w-14 h-14 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-black/5 group-hover:scale-110 transition-transform">
+                    <div className="w-12 h-12 rounded-2xl bg-black/5 flex items-center justify-center">
                       <Plus size={24} />
                     </div>
-                    <span className="text-[11px] font-bold uppercase tracking-[0.2em]">{t('new_folder')}</span>
+                    <span className="font-bold text-sm">{t('new_folder')}</span>
                   </button>
                 </div>
               </section>
 
               {/* My Notes */}
               <section>
-                <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-3xl font-bold tracking-tight uppercase">{t('my_notes')}</h2>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-display font-bold">{t('my_notes')}</h2>
+                  <div className="flex items-center gap-4 text-black/20">
+                    <button className="p-1 hover:text-black transition-colors"><ChevronRight size={20} className="rotate-180" /></button>
+                    <span className="text-[10px] font-bold uppercase tracking-widest">February 2026</span>
+                    <button className="p-1 hover:text-black transition-colors"><ChevronRight size={20} /></button>
+                  </div>
                 </div>
-                <div className="flex gap-10 mb-10 border-b border-black/5">
+                <div className="flex gap-8 mb-8 border-b border-black/5">
                   {(['todays', 'week', 'month'] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setNoteTab(tab)}
-                      className={`pb-5 text-[11px] font-bold uppercase tracking-[0.3em] transition-all relative ${
-                        noteTab === tab ? 'text-ink' : 'text-muted hover:text-ink/60'
+                      className={`pb-4 text-sm font-bold uppercase tracking-widest transition-all relative ${
+                        noteTab === tab ? 'text-black' : 'text-black/20 hover:text-black/40'
                       }`}
                     >
                       {tab === 'todays' ? t('todays') : tab === 'week' ? t('this_week') : t('this_month')}
                       {noteTab === tab && (
                         <motion.div 
                           layoutId="noteTabUnderline"
-                          className="absolute bottom-0 left-0 right-0 h-[3px] bg-ink rounded-full"
+                          className="absolute bottom-0 left-0 right-0 h-0.5 bg-black"
                         />
                       )}
                     </button>
                   ))}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+                <div className="grid grid-cols-4 gap-6">
                   {filterByTab(quickNotes, noteTab).map((note) => (
                     <motion.div 
                       key={note.id}
-                      whileHover={{ y: -8, scale: 1.02 }}
+                      whileHover={{ y: -5 }}
                       onClick={() => setSelectedQuickNote(note)}
-                      className="p-10 rounded-card bg-canvas shadow-sm flex flex-col justify-between aspect-[0.85/1] cursor-pointer group border border-black/5 hover:shadow-2xl hover:shadow-black/5 transition-all"
+                      className="p-8 rounded-[40px] shadow-sm flex flex-col justify-between aspect-[0.85/1] cursor-pointer group"
                       style={{ backgroundColor: note.color }}
                     >
                       <div>
-                        <p className="text-[10px] font-bold text-ink/30 uppercase tracking-[0.2em] mb-6">
-                          {new Date(note.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                        <p className="text-[10px] font-bold text-black/30 uppercase tracking-widest mb-4">
+                          {new Date(note.createdAt).toLocaleDateString()}
                         </p>
-                        <div className="flex justify-between items-start mb-6">
-                          <h4 className="text-2xl font-bold leading-tight tracking-tight group-hover:text-ink/70 transition-colors">{note.title}</h4>
-                          <button className="w-10 h-10 bg-ink rounded-xl text-white opacity-0 group-hover:opacity-100 transition-all shadow-xl flex items-center justify-center">
-                            <Type size={18} />
+                        <div className="flex justify-between items-start mb-4">
+                          <h4 className="font-display font-bold text-xl leading-tight">{note.title}</h4>
+                          <button className="p-2 bg-black rounded-xl text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Type size={16} />
                           </button>
                         </div>
-                        <p className="text-sm font-medium text-ink/60 line-clamp-5 leading-relaxed">
+                        <p className="text-sm text-black/60 line-clamp-4 leading-relaxed">
                           {note.content}
                         </p>
                       </div>
-                      <div className="flex items-center gap-3 text-ink/40">
-                        <div className="w-5 h-5 rounded-full border border-ink/10 flex items-center justify-center">
-                          <div className="w-1.5 h-1.5 rounded-full bg-ink/30" />
+                      <div className="flex items-center gap-2 text-black/30">
+                        <div className="w-4 h-4 rounded-full border border-black/20 flex items-center justify-center">
+                          <div className="w-1.5 h-1.5 rounded-full bg-black/40" />
                         </div>
-                        <span className="text-[10px] font-bold uppercase tracking-[0.2em]">
-                          {new Date(note.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        <span className="text-[10px] font-bold uppercase tracking-widest">
+                          {new Date(note.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, {new Date(note.createdAt).toLocaleDateString([], { weekday: 'long' })}
                         </span>
                       </div>
                     </motion.div>
                   ))}
                   <button 
                     onClick={handleCreateQuickNote}
-                    className="rounded-card border-2 border-dashed border-black/10 flex flex-col items-center justify-center gap-4 text-muted hover:text-ink hover:border-black/20 transition-all aspect-[0.85/1] bg-surface/30 group"
+                    className="rounded-[40px] border-2 border-dashed border-black/5 flex flex-col items-center justify-center gap-3 text-black/20 hover:text-black/40 hover:border-black/10 transition-all aspect-[0.85/1]"
                   >
-                    <div className="w-14 h-14 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-black/5 group-hover:scale-110 transition-transform">
+                    <div className="w-12 h-12 rounded-2xl bg-black/5 flex items-center justify-center">
                       <Plus size={24} />
                     </div>
-                    <span className="text-[11px] font-bold uppercase tracking-[0.2em]">{t('new_note')}</span>
+                    <span className="font-bold text-sm">{t('new_note')}</span>
                   </button>
                 </div>
               </section>
 
               {/* Notebooks (Original) */}
               <section className="pb-12">
-                <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-3xl font-bold tracking-tight uppercase">{t('notebooks')}</h2>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-display font-bold">{t('notebooks')}</h2>
                   <button 
                     onClick={() => setIsCreatingNotebook(true)}
-                    className="w-12 h-12 bg-ink text-white rounded-2xl flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
+                    className="w-10 h-10 bg-black text-white rounded-xl flex items-center justify-center hover:scale-105 transition-transform"
                   >
-                    <Plus size={24} />
+                    <Plus size={20} />
                   </button>
                 </div>
-                <div className="flex gap-8 overflow-x-auto no-scrollbar pb-6">
+                <div className="flex gap-6 overflow-x-auto no-scrollbar pb-4">
                   {filteredNotebooks.map((notebook, i) => {
                     const count = notes.filter(n => n.notebookId === notebook.id).length;
                     return (
                       <motion.div
                         key={notebook.id}
-                        initial={{ opacity: 0, y: 10 }}
+                        initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                        whileHover={{ y: -8, scale: 1.02 }}
+                        transition={{ delay: i * 0.1 }}
+                        whileHover={{ y: -8 }}
                         onClick={() => {
                           setSelectedNotebook(notebook);
                           setSelectedNote(null);
                         }}
-                        className="flex-shrink-0 w-52 group cursor-pointer"
+                        className="flex-shrink-0 w-44 group cursor-pointer"
                       >
                         <div 
-                          className="aspect-[3/4.2] rounded-[32px] shadow-sm relative overflow-hidden flex flex-col justify-between p-8 border border-black/5 transition-all hover:shadow-2xl hover:shadow-black/5"
+                          className="aspect-[3/4] rounded-2xl shadow-lg relative overflow-hidden flex flex-col justify-between p-6"
                           style={{ backgroundColor: notebook.color }}
                         >
-                          <div className="absolute top-0 left-6 w-1.5 h-full bg-black/5" />
+                          <div className="absolute top-0 left-4 w-1 h-full bg-black/5" />
                           <div className="flex justify-between items-start relative z-10">
-                            <Book size={22} className="text-black/20" />
-                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Book size={20} className="text-black/20" />
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button 
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleRenameNotebook(notebook.id);
                                 }}
-                                className="p-1.5 hover:bg-black/5 rounded-lg text-black/20 hover:text-black/40 transition-colors"
+                                className="p-1 hover:bg-black/5 rounded-md text-black/20 hover:text-black/40 transition-colors"
                               >
                                 <Type size={14} />
                               </button>
@@ -642,16 +649,17 @@ export default function Notes({
                                   e.stopPropagation();
                                   handleDeleteNotebook(notebook.id);
                                 }}
-                                className="p-1.5 hover:bg-red-50 rounded-lg text-black/20 hover:text-red-400 transition-colors"
+                                className="p-1 hover:bg-red-50 rounded-md text-black/20 hover:text-red-400 transition-colors"
                               >
                                 <Trash2 size={14} />
                               </button>
                             </div>
                           </div>
                           <div className="relative z-10">
-                            <h4 className="font-bold text-xl leading-tight tracking-tight">{notebook.title}</h4>
-                            <p className="text-[10px] font-bold text-black/30 uppercase tracking-[0.2em] mt-3">{count} {t('pages')}</p>
+                            <h4 className="font-display font-bold text-lg leading-tight">{notebook.title}</h4>
+                            <p className="text-[10px] font-bold text-black/30 uppercase tracking-wider mt-2">{count} {t('pages')}</p>
                           </div>
+                          <div className="absolute bottom-0 right-0 w-16 h-16 bg-white/10 rounded-tl-[40px] blur-xl" />
                         </div>
                       </motion.div>
                     );
@@ -668,25 +676,25 @@ export default function Notes({
             exit={{ opacity: 0, x: 20 }}
             className="flex flex-col h-full"
           >
-            <div className="flex items-center justify-between mb-12">
-              <div className="flex items-center gap-6">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-4">
                 <button 
                   onClick={() => setSelectedFolder(null)}
-                  className="w-12 h-12 rounded-2xl bg-surface flex items-center justify-center hover:bg-black/5 transition-all border border-black/5 shadow-sm"
+                  className="w-10 h-10 rounded-xl bg-black/5 flex items-center justify-center hover:bg-black/10 transition-colors"
                 >
-                  <ArrowLeft size={24} />
+                  <ArrowLeft size={20} />
                 </button>
                 <div>
-                  <h1 className="text-4xl font-bold tracking-tight uppercase">{selectedFolder.title}</h1>
-                  <p className="text-muted text-sm font-bold uppercase tracking-widest opacity-60 mt-1">{t('manage_notebooks')}</p>
+                  <h1 className="text-3xl font-display font-bold tracking-tight">{selectedFolder.title}</h1>
+                  <p className="text-black/40 text-sm mt-1">{t('manage_notebooks')}</p>
                 </div>
               </div>
-              <div className="flex gap-4">
+              <div className="flex gap-3">
                 <button 
                   onClick={() => pdfInputRef.current?.click()}
-                  className="px-8 h-14 bg-surface text-ink rounded-pill flex items-center gap-3 hover:bg-black/5 transition-all font-bold text-[11px] uppercase tracking-widest border border-black/5 shadow-sm"
+                  className="px-6 h-12 bg-black/5 text-black/60 rounded-2xl flex items-center gap-2 hover:bg-black/10 transition-colors font-bold text-sm"
                 >
-                  <Upload size={20} />
+                  <Upload size={18} />
                   {t('upload_pdf')}
                 </button>
                 <input 
@@ -698,9 +706,9 @@ export default function Notes({
                 />
                 <button 
                   onClick={() => setIsCreatingNotebook(true)}
-                  className="px-8 h-14 bg-ink text-canvas rounded-pill flex items-center gap-3 hover:scale-105 transition-transform font-bold text-[11px] uppercase tracking-widest shadow-xl shadow-black/10"
+                  className="px-6 h-12 bg-black text-white rounded-2xl flex items-center gap-2 hover:scale-105 transition-transform font-bold text-sm"
                 >
-                  <Plus size={24} />
+                  <Plus size={20} />
                   {t('new_notebook')}
                 </button>
               </div>
@@ -823,22 +831,22 @@ export default function Notes({
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="w-full max-w-xl rounded-[48px] p-12 shadow-2xl relative overflow-hidden border border-black/5"
+              className="w-full max-w-lg rounded-[40px] p-12 shadow-2xl relative overflow-hidden"
               style={{ backgroundColor: selectedQuickNote.color }}
               onClick={e => e.stopPropagation()}
             >
-              <div className="flex justify-between items-start mb-10">
-                <p className="text-[11px] font-bold text-black/30 uppercase tracking-[0.3em]">
-                  {new Date(selectedQuickNote.createdAt).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              <div className="flex justify-between items-start mb-8">
+                <p className="text-[10px] font-bold text-black/30 uppercase tracking-widest">
+                  {new Date(selectedQuickNote.createdAt).toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                 </p>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <button 
                     onClick={() => handleDeleteQuickNote(selectedQuickNote.id)}
-                    className="p-2.5 text-black/20 hover:text-red-500 transition-colors bg-white/20 rounded-xl hover:bg-white/40"
+                    className="p-2 text-black/20 hover:text-red-500 transition-colors"
                   >
                     <Trash2 size={20} />
                   </button>
-                  <button onClick={() => setSelectedQuickNote(null)} className="p-2.5 text-black/20 hover:text-black transition-colors bg-white/20 rounded-xl hover:bg-white/40">
+                  <button onClick={() => setSelectedQuickNote(null)} className="p-2 text-black/20 hover:text-black transition-colors">
                     <X size={24} />
                   </button>
                 </div>
@@ -846,42 +854,42 @@ export default function Notes({
 
               <input 
                 type="text"
-                value={selectedQuickNote.title === t('untitled_note') ? '' : selectedQuickNote.title}
+                value={selectedQuickNote.title === 'Untitled Note' ? '' : selectedQuickNote.title}
                 onChange={(e) => handleUpdateQuickNote(selectedQuickNote.id, { title: e.target.value })}
                 onBlur={(e) => {
                   if (!e.target.value.trim()) {
-                    handleUpdateQuickNote(selectedQuickNote.id, { title: t('untitled_note') });
+                    handleUpdateQuickNote(selectedQuickNote.id, { title: 'Untitled Note' });
                   }
                 }}
-                className="w-full text-4xl font-bold bg-transparent border-none outline-none mb-8 placeholder:text-black/10 tracking-tight uppercase"
-                placeholder={t('untitled_note')}
-                autoFocus={selectedQuickNote.title === t('untitled_note')}
+                className="w-full text-3xl font-display font-bold bg-transparent border-none outline-none mb-6 placeholder:text-black/10"
+                placeholder="Untitled Note"
+                autoFocus={selectedQuickNote.title === 'Untitled Note'}
               />
 
               <textarea 
                 value={selectedQuickNote.content}
                 onChange={(e) => handleUpdateQuickNote(selectedQuickNote.id, { content: e.target.value })}
-                className="w-full text-xl text-black/70 bg-transparent border-none outline-none resize-none h-80 placeholder:text-black/10 leading-relaxed font-medium"
-                placeholder={t('type_something')}
+                className="w-full text-lg text-black/60 bg-transparent border-none outline-none resize-none h-64 placeholder:text-black/10 leading-relaxed"
+                placeholder="Type your note here..."
               />
 
-              <div className="mt-10 pt-10 border-t border-black/10 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-ink flex items-center justify-center text-canvas shadow-lg">
-                    <Type size={22} />
+              <div className="mt-8 pt-8 border-t border-black/5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-black flex items-center justify-center text-white">
+                    <Type size={20} />
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold text-black/40 uppercase tracking-[0.2em] mb-1">{t('last_edited')}</p>
-                    <p className="text-sm font-bold">
+                    <p className="text-[10px] font-bold text-black/40 uppercase tracking-widest">Last Modified</p>
+                    <p className="text-xs font-bold">
                       {new Date(selectedQuickNote.lastUsedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                 </div>
                 <button 
                   onClick={() => setSelectedQuickNote(null)}
-                  className="px-10 py-4 bg-ink text-canvas rounded-pill font-bold text-sm shadow-xl shadow-black/10 hover:scale-105 transition-transform uppercase tracking-widest"
+                  className="px-8 py-3 bg-black text-white rounded-2xl font-bold text-sm shadow-lg shadow-black/10 hover:scale-105 transition-transform"
                 >
-                  {t('save_note')}
+                  Save Note
                 </button>
               </div>
             </motion.div>
@@ -909,60 +917,60 @@ export default function Notes({
             >
               {/* Sidebar */}
               <motion.div 
-                animate={{ width: isSidebarOpen ? 320 : 0, opacity: isSidebarOpen ? 1 : 0 }}
-                className="border-r border-black/5 flex flex-col bg-surface overflow-hidden"
+                animate={{ width: isSidebarOpen ? 288 : 0, opacity: isSidebarOpen ? 1 : 0 }}
+                className="border-r border-black/5 flex flex-col bg-gray-50/50 overflow-hidden"
               >
-                <div className="p-10 flex flex-col h-full w-80">
-                  <div className="flex items-center justify-between mb-10">
+                <div className="p-8 flex flex-col h-full w-72">
+                  <div className="flex items-center justify-between mb-8">
                     <button 
                       onClick={() => setSelectedNotebook(null)}
-                      className="flex items-center gap-3 text-muted hover:text-ink transition-all group"
+                      className="flex items-center gap-2 text-black/40 hover:text-black transition-colors group"
                     >
-                      <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-                      <span className="font-bold text-[11px] uppercase tracking-[0.2em]">{t('back')}</span>
+                      <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+                      <span className="font-bold text-xs uppercase tracking-widest">Back</span>
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-4 mb-10 p-4 rounded-2xl bg-white/50 border border-black/5">
-                    <div className="w-4 h-4 rounded-full shadow-sm" style={{ backgroundColor: selectedNotebook.color }} />
-                    <h3 className="font-bold text-sm truncate tracking-tight uppercase">{selectedNotebook.title}</h3>
+                  <div className="flex items-center gap-3 mb-8">
+                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: selectedNotebook.color }} />
+                    <h3 className="font-bold text-sm truncate">{selectedNotebook.title}</h3>
                   </div>
                   
-                  <div className="flex-1 flex flex-col gap-2 overflow-y-auto no-scrollbar">
+                  <div className="flex-1 flex flex-col gap-1 overflow-y-auto no-scrollbar">
                     {notebookNotes.map(note => (
                       <div 
                         key={note.id}
                         onClick={() => setSelectedNote(note)}
-                        className={`px-5 py-4 rounded-2xl text-sm font-bold transition-all cursor-pointer flex items-center justify-between group ${
-                          selectedNote?.id === note.id ? 'bg-ink text-canvas shadow-xl shadow-black/10' : 'text-muted hover:bg-black/5'
+                        className={`px-4 py-3 rounded-2xl text-sm font-medium transition-all cursor-pointer flex items-center justify-between group ${
+                          selectedNote?.id === note.id ? 'bg-black text-white shadow-md' : 'text-black/40 hover:bg-black/5'
                         }`}
                       >
-                        <span className="truncate flex-1 uppercase tracking-tight">{note.title}</span>
+                        <span className="truncate flex-1">{note.title}</span>
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDeleteNote(note.id);
                           }}
-                          className={`opacity-0 group-hover:opacity-100 transition-opacity ${selectedNote?.id === note.id ? 'text-canvas/40 hover:text-canvas' : 'text-black/10 hover:text-red-500'}`}
+                          className={`opacity-0 group-hover:opacity-100 transition-opacity ${selectedNote?.id === note.id ? 'text-white/40 hover:text-white' : 'text-black/10 hover:text-black'}`}
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     ))}
                     
                     {notebookNotes.length === 0 && (
-                      <div className="py-12 text-center text-muted italic text-xs uppercase tracking-widest opacity-40">
-                        {t('no_pages')}
+                      <div className="py-8 text-center text-black/20 italic text-xs">
+                        No pages yet.
                       </div>
                     )}
                   </div>
                   
                   <button 
                     onClick={() => handleCreateNote(selectedNotebook.id)}
-                    className="mt-8 flex items-center justify-center gap-3 py-4 bg-ink text-canvas rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-black/10 group"
+                    className="mt-6 flex items-center justify-center gap-2 py-3 bg-black/5 hover:bg-black/10 rounded-2xl transition-colors group"
                   >
-                    <Plus size={18} className="group-hover:rotate-90 transition-transform" />
-                    <span className="text-[11px] font-bold uppercase tracking-widest">{t('new_page')}</span>
+                    <Plus size={16} className="text-black/40 group-hover:text-black transition-colors" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-black/40 group-hover:text-black transition-colors">New Page</span>
                   </button>
                 </div>
               </motion.div>
@@ -979,37 +987,37 @@ export default function Notes({
                 </button>
                 {selectedNote ? (
                   <>
-                    <div className="flex-1 p-16 overflow-y-auto no-scrollbar">
-                      <div className="max-w-4xl mx-auto w-full">
-                        <div className="flex items-end justify-between mb-20">
+                    <div className="flex-1 p-12 overflow-y-auto no-scrollbar">
+                      <div className="max-w-3xl mx-auto w-full">
+                        <div className="flex items-center justify-between mb-12">
                           <input 
                             type="text"
-                            value={selectedNote.title === t('untitled_page') ? '' : selectedNote.title}
+                            value={selectedNote.title === 'Untitled Page' ? '' : selectedNote.title}
                             onChange={(e) => handleUpdateNoteTitle(selectedNote.id, e.target.value)}
                             onBlur={(e) => {
                               if (!e.target.value.trim()) {
-                                handleUpdateNoteTitle(selectedNote.id, t('untitled_page'));
+                                handleUpdateNoteTitle(selectedNote.id, 'Untitled Page');
                               }
                             }}
-                            className="text-6xl font-bold bg-transparent border-none outline-none w-full placeholder:text-ink/10 leading-tight tracking-tighter uppercase"
+                            className="text-4xl font-display font-bold bg-transparent border-none outline-none w-full placeholder:text-black/10"
                             placeholder={t('untitled_page')}
                             autoFocus={selectedNote.title === t('untitled_page')}
                           />
-                          <div className="text-[11px] font-bold text-ink/20 uppercase tracking-[0.4em] shrink-0 ml-12 mb-6">
+                          <div className="text-[10px] font-bold text-black/20 uppercase tracking-widest shrink-0 ml-4">
                             {t('last_edited')} {new Date(selectedNote.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </div>
                         </div>
 
                         {/* Blocks */}
-                        <div className="space-y-4 mb-32">
+                        <div className="space-y-2 mb-24">
                           {currentBlocks.map((block) => (
-                            <div key={block.id} className={`group relative ${['h1', 'h2', 'h3'].includes(block.type) ? 'mt-10 mb-4' : ''}`}>
-                              <div className="absolute -left-14 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all flex items-center gap-2">
+                            <div key={block.id} className={`group relative ${['h1', 'h2', 'h3'].includes(block.type) ? 'mt-6 mb-2' : ''}`}>
+                              <div className="absolute -left-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
                                 <button 
                                   onClick={() => deleteBlock(block.id)}
-                                  className="p-2 rounded-xl hover:bg-red-50 text-red-300 hover:text-red-500 transition-colors shadow-sm bg-white"
+                                  className="p-1.5 rounded-lg hover:bg-red-50 text-red-300 hover:text-red-500 transition-colors"
                                 >
-                                  <Trash2 size={16} />
+                                  <Trash2 size={14} />
                                 </button>
                               </div>
 
@@ -1021,7 +1029,7 @@ export default function Notes({
                                   onKeyDown={(e) => handleKeyDown(e, block)}
                                   autoFocus={focusedBlockId === block.id}
                                   onFocus={() => setFocusedBlockId(block.id)}
-                                  className="w-full text-4xl font-bold bg-transparent border-none outline-none placeholder:text-black/10 uppercase tracking-tight"
+                                  className="w-full text-3xl font-display font-bold bg-transparent border-none outline-none placeholder:text-black/10"
                                   placeholder={t('add_h1')}
                                 />
                               )}
@@ -1033,7 +1041,7 @@ export default function Notes({
                                   onKeyDown={(e) => handleKeyDown(e, block)}
                                   autoFocus={focusedBlockId === block.id}
                                   onFocus={() => setFocusedBlockId(block.id)}
-                                  className="w-full text-3xl font-bold bg-transparent border-none outline-none placeholder:text-black/10 uppercase tracking-tight"
+                                  className="w-full text-2xl font-display font-bold bg-transparent border-none outline-none placeholder:text-black/10"
                                   placeholder={t('add_h2')}
                                 />
                               )}
@@ -1045,7 +1053,7 @@ export default function Notes({
                                   onKeyDown={(e) => handleKeyDown(e, block)}
                                   autoFocus={focusedBlockId === block.id}
                                   onFocus={() => setFocusedBlockId(block.id)}
-                                  className="w-full text-2xl font-bold bg-transparent border-none outline-none placeholder:text-black/10 uppercase tracking-tight"
+                                  className="w-full text-xl font-display font-bold bg-transparent border-none outline-none placeholder:text-black/10"
                                   placeholder={t('add_h3')}
                                 />
                               )}
@@ -1057,12 +1065,12 @@ export default function Notes({
                                   onFocus={() => setFocusedBlockId(block.id)}
                                   autoFocus={focusedBlockId === block.id}
                                   placeholder={focusedBlockId === block.id ? t('type_something') : ""}
-                                  className="w-full text-xl font-medium text-ink/60 bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.5em] overflow-hidden leading-relaxed"
+                                  className="w-full text-lg font-light text-black/60 bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.5em] overflow-hidden"
                                 />
                               )}
                               {block.type === 'bullet' && (
-                                <div className="flex items-start gap-5">
-                                  <div className="w-2 h-2 rounded-full bg-ink/40 mt-3.5 shrink-0" />
+                                <div className="flex items-start gap-3">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-black/40 mt-3 shrink-0" />
                                   <AutoExpandingTextarea 
                                     value={block.content}
                                     onChange={(e) => updateBlock(block.id, e.target.value)}
@@ -1070,13 +1078,13 @@ export default function Notes({
                                     onFocus={() => setFocusedBlockId(block.id)}
                                     autoFocus={focusedBlockId === block.id}
                                     placeholder={focusedBlockId === block.id ? t('list_item') : ""}
-                                    className="w-full text-xl font-medium text-ink/60 bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.5em] overflow-hidden leading-relaxed"
+                                    className="w-full text-lg font-light text-black/60 bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.5em] overflow-hidden"
                                   />
                                 </div>
                               )}
                               {block.type === 'number' && (
-                                <div className="flex items-start gap-5">
-                                  <span className="text-xl font-bold text-ink/20 mt-1 shrink-0 min-w-[2rem]">
+                                <div className="flex items-start gap-3">
+                                  <span className="text-lg font-medium text-black/20 mt-1 shrink-0 min-w-[1.5rem]">
                                     {currentBlocks.filter((b, i) => b.type === 'number' && i <= currentBlocks.indexOf(block)).length}.
                                   </span>
                                   <AutoExpandingTextarea 
@@ -1086,19 +1094,19 @@ export default function Notes({
                                     onFocus={() => setFocusedBlockId(block.id)}
                                     autoFocus={focusedBlockId === block.id}
                                     placeholder={focusedBlockId === block.id ? t('list_item') : ""}
-                                    className="w-full text-xl font-medium text-ink/60 bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.5em] overflow-hidden leading-relaxed"
+                                    className="w-full text-lg font-light text-black/60 bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.5em] overflow-hidden"
                                   />
                                 </div>
                               )}
                               {block.type === 'todo' && (
-                                <div className="flex items-start gap-5">
+                                <div className="flex items-start gap-3">
                                   <button 
                                     onClick={() => updateBlock(block.id, block.content, { checked: !block.checked })}
-                                    className={`mt-2 w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all active:scale-90 shadow-sm ${
-                                      block.checked ? 'bg-ink border-ink text-canvas' : 'border-ink/10 hover:border-ink/30 bg-white'
+                                    className={`mt-2 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all active:scale-90 ${
+                                      block.checked ? 'bg-black border-black text-white' : 'border-black/10 hover:border-black/30'
                                     }`}
                                   >
-                                    {block.checked && <Check size={16} strokeWidth={4} />}
+                                    {block.checked && <Check size={14} strokeWidth={3} />}
                                   </button>
                                   <AutoExpandingTextarea 
                                     value={block.content}
@@ -1107,20 +1115,20 @@ export default function Notes({
                                     onFocus={() => setFocusedBlockId(block.id)}
                                     autoFocus={focusedBlockId === block.id}
                                     placeholder={focusedBlockId === block.id ? t('todo_item') : ""}
-                                    className={`w-full text-xl font-medium bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.5em] overflow-hidden transition-all leading-relaxed ${
-                                      block.checked ? 'text-ink/20 line-through' : 'text-ink/60'
+                                    className={`w-full text-lg font-light bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.5em] overflow-hidden transition-all ${
+                                      block.checked ? 'text-black/20 line-through' : 'text-black/60'
                                     }`}
                                   />
                                 </div>
                               )}
                               {block.type === 'toggle' && (
                                 <div className="flex flex-col">
-                                  <div className="flex items-start gap-3">
+                                  <div className="flex items-start gap-2">
                                     <button 
                                       onClick={() => updateBlock(block.id, block.content, { isOpen: !block.isOpen })}
-                                      className={`mt-2.5 p-1 hover:bg-black/5 rounded-lg transition-transform ${block.isOpen ? 'rotate-90' : ''}`}
+                                      className={`mt-2 p-0.5 hover:bg-black/5 rounded transition-transform ${block.isOpen ? 'rotate-90' : ''}`}
                                     >
-                                      <ChevronRight size={22} className="text-ink/40" />
+                                      <ChevronRight size={18} className="text-black/40" />
                                     </button>
                                     <AutoExpandingTextarea 
                                       value={block.content}
@@ -1129,24 +1137,24 @@ export default function Notes({
                                       onFocus={() => setFocusedBlockId(block.id)}
                                       autoFocus={focusedBlockId === block.id}
                                       placeholder={focusedBlockId === block.id ? "Toggle list" : ""}
-                                      className="w-full text-xl font-bold text-ink/80 bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.5em] overflow-hidden leading-relaxed"
+                                      className="w-full text-lg font-medium text-black/80 bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.5em] overflow-hidden"
                                     />
                                   </div>
                                   {block.isOpen && (
-                                    <div className="ml-10 mt-3 border-l-4 border-black/5 pl-6 py-4 text-sm text-ink/40 font-bold uppercase tracking-widest italic">
+                                    <div className="ml-8 mt-2 border-l-2 border-black/5 pl-4 py-2 text-sm text-black/40 italic">
                                       Toggle content goes here... (Nested blocks coming soon)
                                     </div>
                                   )}
                                 </div>
                               )}
                               {block.type === 'image' && (
-                                <div className="relative rounded-[40px] overflow-hidden shadow-2xl group/img border border-black/5">
+                                <div className="relative rounded-3xl overflow-hidden shadow-xl group/img">
                                   <img src={block.content} alt="Note asset" className="w-full h-auto" referrerPolicy="no-referrer" />
                                   <button 
                                     onClick={() => deleteBlock(block.id)}
-                                    className="absolute top-6 right-6 p-3 bg-black/50 text-white rounded-full opacity-0 group-hover/img:opacity-100 transition-all backdrop-blur-md hover:bg-red-500 hover:scale-110"
+                                    className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-full opacity-0 group-hover/img:opacity-100 transition-opacity backdrop-blur-md"
                                   >
-                                    <X size={20} />
+                                    <X size={16} />
                                   </button>
                                 </div>
                               )}
@@ -1157,71 +1165,71 @@ export default function Notes({
                     </div>
 
                     {/* Sidebar Toolbar */}
-                    <div className="w-24 border-l border-black/5 bg-surface/30 flex flex-col items-center py-16 gap-6">
-                      <div className="text-[11px] font-bold text-ink/20 uppercase tracking-[0.4em] vertical-text mb-6">{t('tools')}</div>
+                    <div className="w-20 border-l border-black/5 bg-gray-50/30 flex flex-col items-center py-12 gap-4">
+                      <div className="text-[10px] font-bold text-black/20 uppercase tracking-widest vertical-text mb-4">{t('tools')}</div>
                       <button 
                         onClick={() => addBlock('h1')}
-                        className="w-14 h-14 flex items-center justify-center hover:bg-white rounded-2xl transition-all text-ink/40 hover:text-ink hover:scale-110 active:scale-95 shadow-sm hover:shadow-md border border-transparent hover:border-black/5"
+                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
                         title={t('add_h1')}
                       >
-                        <Heading1 size={24} />
+                        <Heading1 size={20} />
                       </button>
                       <button 
                         onClick={() => addBlock('h2')}
-                        className="w-14 h-14 flex items-center justify-center hover:bg-white rounded-2xl transition-all text-ink/40 hover:text-ink hover:scale-110 active:scale-95 shadow-sm hover:shadow-md border border-transparent hover:border-black/5"
+                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
                         title={t('add_h2')}
                       >
-                        <Heading2 size={24} />
+                        <Heading2 size={20} />
                       </button>
                       <button 
                         onClick={() => addBlock('h3')}
-                        className="w-14 h-14 flex items-center justify-center hover:bg-white rounded-2xl transition-all text-ink/40 hover:text-ink hover:scale-110 active:scale-95 shadow-sm hover:shadow-md border border-transparent hover:border-black/5"
+                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
                         title={t('add_h3')}
                       >
-                        <Heading3 size={24} />
+                        <Heading3 size={20} />
                       </button>
-                      <div className="w-10 h-px bg-black/5 my-4" />
+                      <div className="w-8 h-px bg-black/5 my-2" />
                       <button 
                         onClick={() => addBlock('text')}
-                        className="w-14 h-14 flex items-center justify-center hover:bg-white rounded-2xl transition-all text-ink/40 hover:text-ink hover:scale-110 active:scale-95 shadow-sm hover:shadow-md border border-transparent hover:border-black/5"
+                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
                         title={t('text')}
                       >
-                        <Type size={24} />
+                        <Type size={20} />
                       </button>
                       <button 
                         onClick={() => addBlock('bullet')}
-                        className="w-14 h-14 flex items-center justify-center hover:bg-white rounded-2xl transition-all text-ink/40 hover:text-ink hover:scale-110 active:scale-95 shadow-sm hover:shadow-md border border-transparent hover:border-black/5"
+                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
                         title={t('add_bullet')}
                       >
-                        <List size={24} />
+                        <List size={20} />
                       </button>
                       <button 
                         onClick={() => addBlock('number')}
-                        className="w-14 h-14 flex items-center justify-center hover:bg-white rounded-2xl transition-all text-ink/40 hover:text-ink hover:scale-110 active:scale-95 shadow-sm hover:shadow-md border border-transparent hover:border-black/5"
+                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
                         title={t('add_number')}
                       >
-                        <ListOrdered size={24} />
+                        <ListOrdered size={20} />
                       </button>
                       <button 
                         onClick={() => addBlock('todo')}
-                        className="w-14 h-14 flex items-center justify-center hover:bg-white rounded-2xl transition-all text-ink/40 hover:text-ink hover:scale-110 active:scale-95 shadow-sm hover:shadow-md border border-transparent hover:border-black/5"
+                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
                         title={t('add_todo')}
                       >
-                        <ListTodo size={24} />
+                        <ListTodo size={20} />
                       </button>
                       <button 
                         onClick={() => addBlock('toggle')}
-                        className="w-14 h-14 flex items-center justify-center hover:bg-white rounded-2xl transition-all text-ink/40 hover:text-ink hover:scale-110 active:scale-95 shadow-sm hover:shadow-md border border-transparent hover:border-black/5"
+                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
                         title="Toggle List"
                       >
-                        <ChevronRight size={24} />
+                        <ChevronRight size={20} />
                       </button>
                       <button 
                         onClick={() => fileInputRef.current?.click()}
-                        className="w-14 h-14 flex items-center justify-center hover:bg-white rounded-2xl transition-all text-ink/40 hover:text-ink hover:scale-110 active:scale-95 shadow-sm hover:shadow-md border border-transparent hover:border-black/5"
+                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
                         title="Add Image"
                       >
-                        <ImageIcon size={24} />
+                        <ImageIcon size={20} />
                       </button>
                       <input 
                         type="file"
@@ -1233,12 +1241,10 @@ export default function Notes({
                     </div>
                   </>
                 ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center text-center p-20">
-                    <div className="w-32 h-32 rounded-[48px] bg-surface flex items-center justify-center text-ink/10 mb-10 shadow-inner border border-black/5">
-                      <Book size={64} className="opacity-20" />
-                    </div>
-                    <h3 className="text-3xl font-bold tracking-tight uppercase mb-4">{t('select_page_title')}</h3>
-                    <p className="text-muted text-sm font-bold uppercase tracking-widest opacity-60 max-w-xs leading-relaxed">{t('select_page_subtitle')}</p>
+                  <div className="flex-1 flex flex-col items-center justify-center text-center text-black/10">
+                    <Book size={64} className="mb-4 opacity-20" />
+                    <h3 className="text-xl font-bold">Select a page to start writing</h3>
+                    <p className="text-sm mt-2">Or create a new one to capture your thoughts.</p>
                   </div>
                 )}
               </div>

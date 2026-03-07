@@ -17,12 +17,10 @@ import Tasks from './components/Tasks';
 import Notes from './components/Notes';
 import Calendar from './components/Calendar';
 import Settings from './components/Settings';
-import LandingPage from './components/LandingPage';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 
 function AppContent() {
   const { t } = useLanguage();
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [isLoaded, setIsLoaded] = useState(false);
   const [events, setEvents] = useState<CalendarEvent[]>(MOCK_EVENTS);
@@ -50,63 +48,83 @@ function AppContent() {
 
   if (!isLoaded) {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-canvas">
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#f8f9fa]">
         <motion.div 
-          animate={{ scale: [1, 1.1, 1] }}
-          transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-          className="w-12 h-12 rounded-2xl bg-ink flex items-center justify-center mb-6"
-        >
-          <div className="w-6 h-6 rounded-sm bg-white rotate-45" />
-        </motion.div>
+          animate={{ rotate: 360 }}
+          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+          className="w-16 h-16 rounded-full border-4 border-black/5 border-t-black/20 mb-4"
+        />
         <motion.p 
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="text-xs font-bold tracking-[0.3em] text-ink/20 uppercase"
+          className="text-sm font-light tracking-widest text-black/40 uppercase"
         >
-          {t('loading')}
+          Preparing your study space
         </motion.p>
       </div>
     );
   }
 
-  if (!isAuthenticated) {
-    return <LandingPage onSignIn={() => setIsAuthenticated(true)} />;
-  }
-
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-canvas selection:bg-ink selection:text-white">
-      {/* Top Header - Minimal */}
-      <header className="h-16 flex items-center justify-between px-10 z-40 shrink-0">
+    <div className="h-screen w-screen flex flex-col overflow-hidden">
+      {/* Top Navigation */}
+      <header className="h-20 flex items-center justify-between px-8 z-50">
         <div className="flex items-center gap-3">
-          <div className="w-6 h-6 rounded-lg bg-ink flex items-center justify-center">
-            <div className="w-3 h-3 rounded-sm bg-white rotate-45" />
+          <div className="w-8 h-8 rounded-lg bg-black flex items-center justify-center">
+            <div className="w-4 h-4 rounded-sm bg-white rotate-45" />
           </div>
-          <span className="font-bold text-lg tracking-tight">Noty</span>
+          <span className="font-display font-bold text-xl tracking-tight">Noty</span>
         </div>
 
-        <div className="flex items-center gap-6">
-          <button className="text-ink/40 hover:text-ink transition-colors">
-            <Search size={18} />
+        <nav className="relative flex items-center gap-1 bg-black/5 p-1 rounded-2xl backdrop-blur-md">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as TabType)}
+                className={`relative flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300 ${
+                  isActive ? 'text-black' : 'text-black/40 hover:text-black/60'
+                }`}
+              >
+                {isActive && (
+                  <motion.div
+                    layoutId="nav-beam"
+                    className="absolute inset-0 bg-white shadow-sm rounded-xl z-0"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
+                <Icon size={18} className="relative z-10" />
+                <span className="relative z-10 text-sm font-medium">{tab.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="flex items-center gap-4">
+          <button className="p-2 text-black/40 hover:text-black transition-colors" title={t('search')}>
+            <Search size={20} />
           </button>
-          <button className="text-ink/40 hover:text-ink transition-colors">
-            <Bell size={18} />
+          <button className="p-2 text-black/40 hover:text-black transition-colors">
+            <Bell size={20} />
           </button>
-          <div className="w-8 h-8 rounded-full bg-surface flex items-center justify-center cursor-pointer hover:scale-105 transition-transform">
-            <User size={16} className="text-ink/60" />
+          <div className="w-10 h-10 rounded-full glass-panel flex items-center justify-center cursor-pointer hover:scale-105 transition-transform">
+            <User size={20} className="text-black/60" />
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 relative px-10 pb-32 overflow-hidden">
+      <main className="flex-1 relative px-8 pb-8 overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.02 }}
-            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-            className="h-full w-full max-w-7xl mx-auto"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            className="h-full w-full"
           >
             {activeTab === 'dashboard' && (
               <Dashboard 
@@ -141,30 +159,14 @@ function AppContent() {
                 onTagsChange={setTags} 
               />
             )}
-            {activeTab === 'settings' && <Settings onSignOut={() => setIsAuthenticated(false)} />}
+            {activeTab === 'settings' && <Settings />}
           </motion.div>
         </AnimatePresence>
       </main>
 
-      {/* Floating Dock Navigation */}
-      <div className="dock-container">
-        <nav className="dock">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as TabType)}
-                className={`dock-item ${isActive ? 'dock-item-active' : ''}`}
-                title={tab.label}
-              >
-                <Icon size={20} />
-              </button>
-            );
-          })}
-        </nav>
-      </div>
+      {/* Decorative Background Elements */}
+      <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-100/30 blur-[120px] rounded-full -z-10" />
+      <div className="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-rose-100/30 blur-[120px] rounded-full -z-10" />
     </div>
   );
 }
