@@ -587,7 +587,7 @@ function AddEventModal({
 
   if (isAdvanced) {
     const selectedTag = tags.find(t => t.id === selectedTagId);
-    const headerColor = selectedTag ? selectedTag.color.replace('bg-', '') : '#FF8A80';
+    const headerColor = selectedTag ? selectedTag.color.replace('bg-', '') : '#000000';
     
     return (
       <motion.div 
@@ -648,7 +648,7 @@ function AddEventModal({
             <div className="bg-gray-50 rounded-3xl p-5 flex items-center justify-between group cursor-pointer hover:bg-gray-100 transition-all border border-black/[0.03]">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-2xl bg-white shadow-sm flex items-center justify-center">
-                  <CalendarIcon size={18} className="text-[#FF8A80]" />
+                  <CalendarIcon size={18} className="text-black" />
                 </div>
                 <span className="text-black font-bold">
                   {new Date(date).toLocaleDateString(language === '日本語' ? 'ja-JP' : 'default', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
@@ -705,7 +705,7 @@ function AddEventModal({
                           animate={{
                             scale: isSelected ? 1 : 0.85,
                             opacity: isSelected ? 1 : 0.3,
-                            backgroundColor: isSelected ? '#FF8A80' : 'transparent',
+                            backgroundColor: isSelected ? '#000000' : 'transparent',
                             color: isSelected ? '#ffffff' : '#000000',
                           }}
                           transition={{ type: 'spring', stiffness: 80, damping: 15, mass: 1 }}
@@ -714,7 +714,7 @@ function AddEventModal({
                             const el = timeRollerRef.current?.querySelector(`[data-time="${t}"]`);
                             el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
                           }}
-                          className={`w-[90%] mx-auto h-[52px] flex items-center justify-center rounded-full snap-center shrink-0 outline-none transition-shadow ${isSelected ? 'shadow-lg shadow-[#FF8A80]/30' : ''}`}
+                          className={`w-[90%] mx-auto h-[52px] flex items-center justify-center rounded-full snap-center shrink-0 outline-none transition-shadow ${isSelected ? 'shadow-lg shadow-black/30' : ''}`}
                         >
                           <span className={`font-bold transition-all duration-500 ${isSelected ? 'text-lg' : 'text-sm'}`}>
                             {displayTimeLabel}
@@ -725,7 +725,7 @@ function AddEventModal({
                   </div>
                 </div>
                 {/* Visual Guide - matching the new pill shape */}
-                <div className="absolute top-1/2 -translate-y-1/2 left-[5%] right-[5%] h-[52px] border-2 border-[#FF8A80]/5 rounded-full pointer-events-none z-0" />
+                <div className="absolute top-1/2 -translate-y-1/2 left-[5%] right-[5%] h-[52px] border-2 border-black/5 rounded-full pointer-events-none z-0" />
               </div>
             </div>
 
@@ -743,7 +743,7 @@ function AddEventModal({
                     key={opt.value}
                     type="button"
                     onClick={() => setDuration(opt.value)}
-                    className={`flex-1 py-3 rounded-full text-sm font-bold transition-all duration-300 ${duration === opt.value ? 'bg-[#FF8A80] text-white shadow-md' : 'text-black/30 hover:text-black/50 hover:bg-black/5'}`}
+                    className={`flex-1 py-3 rounded-full text-sm font-bold transition-all duration-300 ${duration === opt.value ? 'bg-black text-white shadow-md' : 'text-black/30 hover:text-black/50 hover:bg-black/5'}`}
                   >
                     {opt.label}
                   </button>
@@ -758,7 +758,7 @@ function AddEventModal({
                 <button 
                   type="button"
                   onClick={() => setIsCreatingTag(!isCreatingTag)}
-                  className="text-[11px] font-bold text-[#FF8A80] uppercase tracking-widest hover:opacity-80 transition-opacity"
+                  className="text-[11px] font-bold text-black uppercase tracking-widest hover:opacity-80 transition-opacity"
                 >
                   {isCreatingTag ? t('cancel') : `+ ${t('new_tag')}`}
                 </button>
@@ -771,7 +771,7 @@ function AddEventModal({
                     value={newTagName}
                     onChange={e => setNewTagName(e.target.value)}
                     placeholder={t('tag_name')}
-                    className="w-full bg-white border-none outline-none rounded-xl px-4 py-2 text-sm placeholder:text-black/20 focus:ring-2 ring-[#FF8A80]/20 transition-all"
+                    className="w-full bg-white border-none outline-none rounded-xl px-4 py-2 text-sm placeholder:text-black/20 focus:ring-2 ring-black/20 transition-all"
                   />
                   <div className="flex items-center justify-between">
                     <div className="flex gap-1.5">

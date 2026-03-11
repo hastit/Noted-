@@ -1,31 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  LayoutDashboard, 
-  CheckSquare, 
-  BookOpen, 
-  Calendar as CalendarIcon, 
+import {
+  LayoutDashboard,
+  CheckSquare,
+  BookOpen,
+  Calendar as CalendarIcon,
   Settings as SettingsIcon,
   Bell,
   Search,
-  User
+  User,
 } from 'lucide-react';
-import { TabType, CalendarEvent, Tag, Notebook, Folder, Note, QuickNote } from './types';
-import { DEFAULT_TAGS, MOCK_EVENTS, MOCK_NOTEBOOKS, MOCK_FOLDERS, MOCK_NOTES, MOCK_QUICK_NOTES } from './constants';
+import { TabType, CalendarEvent, Tag, Notebook, Folder, Note, QuickNote, Task } from './types';
+import { DEFAULT_TAGS, MOCK_EVENTS, MOCK_NOTEBOOKS, MOCK_FOLDERS, MOCK_NOTES, MOCK_QUICK_NOTES, MOCK_TASKS } from './constants';
 import Dashboard from './components/Dashboard';
 import Tasks from './components/Tasks';
 import Notes from './components/Notes';
 import Calendar from './components/Calendar';
 import Settings from './components/Settings';
+import PomodoroTimer from './components/PomodoroTimer';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 
 function AppContent() {
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [isLoaded, setIsLoaded] = useState(false);
+  const [showPomodoro, setShowPomodoro] = useState(false);
   const [events, setEvents] = useState<CalendarEvent[]>(MOCK_EVENTS);
   const [tags, setTags] = useState<Tag[]>(DEFAULT_TAGS);
   
+  // Tasks State
+  const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);
+
   // Notes State
   const [notebooks, setNotebooks] = useState<Notebook[]>(MOCK_NOTEBOOKS);
   const [folders, setFolders] = useState<Folder[]>(MOCK_FOLDERS);
@@ -73,7 +78,7 @@ function AppContent() {
           <div className="w-8 h-8 rounded-lg bg-black flex items-center justify-center">
             <div className="w-4 h-4 rounded-sm bg-white rotate-45" />
           </div>
-          <span className="font-display font-bold text-xl tracking-tight">Noty</span>
+          <span className="font-display font-bold text-xl tracking-tight">Noted</span>
         </div>
 
         <nav className="relative flex items-center gap-1 bg-black/5 p-1 rounded-2xl backdrop-blur-md">
@@ -119,26 +124,40 @@ function AppContent() {
       <main className="flex-1 relative px-8 pb-8 overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div
-            key={activeTab}
+            key={showPomodoro ? 'pomodoro' : activeTab}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             className="h-full w-full"
           >
-            {activeTab === 'dashboard' && (
-              <Dashboard 
-                events={events} 
-                tags={tags} 
+            {showPomodoro && (
+              <PomodoroTimer onClose={() => setShowPomodoro(false)} />
+            )}
+            {!showPomodoro && activeTab === 'dashboard' && (
+              <Dashboard
+                events={events}
+                tags={tags}
                 onNavigate={(tab, notebookId) => {
                   if (notebookId) setSelectedNotebookId(notebookId);
                   setActiveTab(tab);
-                }} 
+                }}
+                onStartFocus={() => setShowPomodoro(true)}
               />
             )}
-            {activeTab === 'tasks' && <Tasks />}
-            {activeTab === 'notes' && (
-              <Notes 
+            {!showPomodoro && activeTab === 'tasks' && (
+              <Tasks
+                tasks={tasks}
+                onTasksChange={setTasks}
+                notebooks={notebooks}
+                onNavigate={(tab, notebookId) => {
+                  if (notebookId) setSelectedNotebookId(notebookId);
+                  setActiveTab(tab);
+                }}
+              />
+            )}
+            {!showPomodoro && activeTab === 'notes' && (
+              <Notes
                 notebooks={notebooks}
                 folders={folders}
                 notes={notes}
@@ -149,17 +168,20 @@ function AppContent() {
                 onQuickNotesChange={setQuickNotes}
                 initialNotebookId={selectedNotebookId}
                 onClearInitialNotebook={() => setSelectedNotebookId(null)}
+                tasks={tasks}
+                onTasksChange={setTasks}
+                onNavigateToTasks={() => setActiveTab('tasks')}
               />
             )}
-            {activeTab === 'calendar' && (
-              <Calendar 
-                events={events} 
-                tags={tags} 
-                onEventsChange={setEvents} 
-                onTagsChange={setTags} 
+            {!showPomodoro && activeTab === 'calendar' && (
+              <Calendar
+                events={events}
+                tags={tags}
+                onEventsChange={setEvents}
+                onTagsChange={setTags}
               />
             )}
-            {activeTab === 'settings' && <Settings />}
+            {!showPomodoro && activeTab === 'settings' && <Settings />}
           </motion.div>
         </AnimatePresence>
       </main>

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, MoreHorizontal, Clock, Calendar as CalendarIcon, CheckCircle2, X, Circle } from 'lucide-react';
-import { 
-  DndContext, 
-  DragEndEvent, 
-  useDroppable, 
+import { Plus, MoreHorizontal, Clock, Calendar as CalendarIcon, CheckCircle2, X, Circle, Book, ExternalLink, Pencil } from 'lucide-react';
+import {
+  DndContext,
+  DragEndEvent,
+  useDroppable,
   useDraggable,
   PointerSensor,
   useSensor,
@@ -14,13 +14,22 @@ import {
   defaultDropAnimationSideEffects
 } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { MOCK_TASKS } from '../constants';
-import { Task, TaskStatus } from '../types';
+import { Task, TaskStatus, Notebook, TabType } from '../types';
 import { useLanguage } from '../context/LanguageContext';
+
+interface TasksProps {
+  tasks: Task[];
+  onTasksChange: (tasks: Task[]) => void;
+  notebooks: Notebook[];
+  onNavigate: (tab: TabType, notebookId?: string) => void;
+}
 
 interface TaskCardProps {
   task: Task;
   isDragging?: boolean;
+  linkedNotebook?: Notebook;
+  onNavigateToNotebook?: () => void;
+  onEdit?: () => void;
 }
 
 const COLUMN_META: Record<TaskStatus, { color: string; dot: string; label: string }> = {
@@ -29,13 +38,13 @@ const COLUMN_META: Record<TaskStatus, { color: string; dot: string; label: strin
   done:    { color: 'bg-emerald-50',    dot: 'bg-emerald-500', label: '' },
 };
 
-export default function Tasks() {
+export default function Tasks({ tasks, onTasksChange, notebooks, onNavigate }: TasksProps) {
   const { t } = useLanguage();
-  const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalStatus, setModalStatus] = useState<TaskStatus>('todo');
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -65,7 +74,7 @@ export default function Tasks() {
     if (!over) return;
     const taskId = active.id as string;
     const newStatus = over.id as TaskStatus;
-    setTasks(prev => prev.map(task => {
+    onTasksChange(tasks.map(task => {
       if (task.id === taskId && task.status !== newStatus) {
         const updated = { ...task, status: newStatus };
         if (newStatus === 'started' && !task.startedAt)
@@ -79,8 +88,14 @@ export default function Tasks() {
   };
 
   const handleAddTask = (taskData: Omit<Task, 'id' | 'status'>) => {
-    setTasks(prev => [...prev, { ...taskData, id: Math.random().toString(36).substr(2, 9), status: modalStatus }]);
+    onTasksChange([...tasks, { ...taskData, id: Math.random().toString(36).substr(2, 9), status: modalStatus }]);
     setIsModalOpen(false);
+  };
+
+  const handleEditTask = (taskData: Omit<Task, 'id' | 'status'>) => {
+    if (!editingTask) return;
+    onTasksChange(tasks.map(t => t.id === editingTask.id ? { ...editingTask, ...taskData } : t));
+    setEditingTask(null);
   };
 
   const openModal = (status: TaskStatus = 'todo') => {
@@ -145,7 +160,10 @@ export default function Tasks() {
                 id={col.id}
                 title={col.title}
                 tasks={getTasksByStatus(col.id)}
+                notebooks={notebooks}
                 onAddTask={() => openModal(col.id)}
+                onNavigate={onNavigate}
+                onEditTask={setEditingTask}
               />
             </motion.div>
           ))}
@@ -168,6 +186,16 @@ export default function Tasks() {
             onClose={() => setIsModalOpen(false)}
             onSubmit={handleAddTask}
             initialStatus={modalStatus}
+            notebooks={notebooks}
+          />
+        )}
+        {editingTask && (
+          <AddTaskModal
+            onClose={() => setEditingTask(null)}
+            onSubmit={handleEditTask}
+            initialStatus={editingTask.status}
+            notebooks={notebooks}
+            existingTask={editingTask}
           />
         )}
       </AnimatePresence>
@@ -175,8 +203,10 @@ export default function Tasks() {
   );
 }
 
-function Column({ id, title, tasks, onAddTask }: {
-  id: TaskStatus; title: string; tasks: Task[]; onAddTask: () => void;
+function Column({ id, title, tasks, notebooks, onAddTask, onNavigate, onEditTask }: {
+  id: TaskStatus; title: string; tasks: Task[]; notebooks: Notebook[]; onAddTask: () => void;
+  onNavigate: (tab: TabType, notebookId?: string) => void;
+  onEditTask: (task: Task) => void;
 }) {
   const { t } = useLanguage();
   const { setNodeRef, isOver } = useDroppable({ id });
@@ -212,7 +242,13 @@ function Column({ id, title, tasks, onAddTask }: {
         }`}
       >
         {tasks.map(task => (
-          <DraggableTaskCard key={task.id} task={task} />
+          <DraggableTaskCard
+            key={task.id}
+            task={task}
+            linkedNotebook={notebooks.find(nb => nb.id === task.notebookId)}
+            onNavigateToNotebook={task.notebookId ? () => onNavigate('notes', task.notebookId) : undefined}
+            onEdit={() => onEditTask(task)}
+          />
         ))}
 
         <button
@@ -227,7 +263,9 @@ function Column({ id, title, tasks, onAddTask }: {
   );
 }
 
-function DraggableTaskCard({ task }: { task: Task }) {
+function DraggableTaskCard({ task, linkedNotebook, onNavigateToNotebook, onEdit }: {
+  task: Task; linkedNotebook?: Notebook; onNavigateToNotebook?: () => void; onEdit?: () => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id });
   return (
     <div
@@ -236,12 +274,17 @@ function DraggableTaskCard({ task }: { task: Task }) {
       {...listeners}
       {...attributes}
     >
-      <TaskCard task={task} />
+      <TaskCard
+        task={task}
+        linkedNotebook={linkedNotebook}
+        onNavigateToNotebook={onNavigateToNotebook}
+        onEdit={onEdit}
+      />
     </div>
   );
 }
 
-function TaskCard({ task, isDragging }: TaskCardProps) {
+function TaskCard({ task, isDragging, linkedNotebook, onNavigateToNotebook, onEdit }: TaskCardProps) {
   const { t } = useLanguage();
 
   const importanceColor = task.importance >= 4
@@ -255,7 +298,7 @@ function TaskCard({ task, isDragging }: TaskCardProps) {
       layoutId={task.id}
       whileHover={!isDragging ? { y: -2 } : {}}
       transition={{ duration: 0.15 }}
-      className={`bg-white rounded-xl p-4 cursor-grab active:cursor-grabbing border border-black/[0.06] transition-all ${
+      className={`group/card bg-white rounded-xl p-4 cursor-grab active:cursor-grabbing border border-black/[0.06] transition-all ${
         isDragging ? 'shadow-xl ring-1 ring-black/10 scale-[1.02]' : 'shadow-sm hover:shadow-md'
       } ${task.status === 'done' ? 'opacity-60' : ''}`}
     >
@@ -264,15 +307,27 @@ function TaskCard({ task, isDragging }: TaskCardProps) {
         <h4 className={`font-semibold text-sm leading-snug text-black flex-1 ${task.status === 'done' ? 'line-through text-black/40' : ''}`}>
           {task.title}
         </h4>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {onEdit && (
+            <button
+              onPointerDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); onEdit(); }}
+              className="opacity-0 group-hover/card:opacity-100 p-1 rounded-md hover:bg-black/[0.06] text-black/20 hover:text-black/50 transition-all"
+              title="Edit task"
+            >
+              <Pencil size={12} />
+            </button>
+          )}
         {task.status === 'done' ? (
-          <CheckCircle2 size={15} className="text-emerald-500 shrink-0 mt-0.5" />
+          <CheckCircle2 size={15} className="text-emerald-500 mt-0.5" />
         ) : task.status === 'started' ? (
-          <div className="w-3.5 h-3.5 rounded-full border-2 border-[#1d4ed8] shrink-0 mt-0.5 flex items-center justify-center">
+          <div className="w-3.5 h-3.5 rounded-full border-2 border-[#1d4ed8] mt-0.5 flex items-center justify-center">
             <div className="w-1.5 h-1.5 rounded-full bg-[#1d4ed8]" />
           </div>
         ) : (
-          <Circle size={15} className="text-black/15 shrink-0 mt-0.5" />
+          <Circle size={15} className="text-black/15 mt-0.5" />
         )}
+        </div>
       </div>
 
       {task.description && (
@@ -311,25 +366,43 @@ function TaskCard({ task, isDragging }: TaskCardProps) {
           {t('finished_on')} {task.finishedAt}
         </p>
       )}
+
+      {/* Linked notebook badge */}
+      {linkedNotebook && onNavigateToNotebook && (
+        <button
+          onPointerDown={e => e.stopPropagation()}
+          onClick={e => { e.stopPropagation(); onNavigateToNotebook(); }}
+          className="mt-3 w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all hover:opacity-80 active:scale-95"
+          style={{ backgroundColor: linkedNotebook.color }}
+        >
+          <Book size={10} className="shrink-0 text-black/50" />
+          <span className="truncate text-black/60">{linkedNotebook.title}</span>
+          <ExternalLink size={9} className="ml-auto shrink-0 text-black/30" />
+        </button>
+      )}
     </motion.div>
   );
 }
 
-function AddTaskModal({ onClose, onSubmit, initialStatus }: {
+function AddTaskModal({ onClose, onSubmit, initialStatus, notebooks, existingTask }: {
   onClose: () => void;
   onSubmit: (data: Omit<Task, 'id' | 'status'>) => void;
   initialStatus: TaskStatus;
+  notebooks: Notebook[];
+  existingTask?: Task;
 }) {
   const { t } = useLanguage();
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [dueDate, setDueDate] = useState(new Date().toISOString().split('T')[0]);
-  const [importance, setImportance] = useState<1|2|3|4|5>(3);
+  const isEditing = !!existingTask;
+  const [title, setTitle] = useState(existingTask?.title ?? '');
+  const [description, setDescription] = useState(existingTask?.description ?? '');
+  const [dueDate, setDueDate] = useState(existingTask?.dueDate ?? new Date().toISOString().split('T')[0]);
+  const [importance, setImportance] = useState<1|2|3|4|5>(existingTask?.importance ?? 3);
+  const [notebookId, setNotebookId] = useState<string>(existingTask?.notebookId ?? '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    onSubmit({ title, description, dueDate, importance });
+    onSubmit({ title, description, dueDate, importance, notebookId: notebookId || undefined });
   };
 
   return (
@@ -350,7 +423,7 @@ function AddTaskModal({ onClose, onSubmit, initialStatus }: {
       >
         {/* Modal header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-black/[0.05]">
-          <h2 className="text-base font-semibold text-black">{t('new_task')}</h2>
+          <h2 className="text-base font-semibold text-black">{isEditing ? 'Edit Task' : t('new_task')}</h2>
           <button onClick={onClose} className="w-7 h-7 rounded-lg hover:bg-black/[0.05] flex items-center justify-center transition-colors">
             <X size={15} className="text-black/40" />
           </button>
@@ -407,12 +480,46 @@ function AddTaskModal({ onClose, onSubmit, initialStatus }: {
             </div>
           </div>
 
+          {/* Notebook linker */}
+          {notebooks.length > 0 && (
+            <div>
+              <label className="block text-[10px] font-semibold text-black/30 uppercase tracking-widest mb-2">
+                Link to Notebook <span className="normal-case font-normal">(optional)</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setNotebookId('')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    !notebookId ? 'bg-black text-white' : 'bg-black/[0.04] text-black/40 hover:bg-black/[0.08]'
+                  }`}
+                >
+                  None
+                </button>
+                {notebooks.map(nb => (
+                  <button
+                    key={nb.id}
+                    type="button"
+                    onClick={() => setNotebookId(nb.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      notebookId === nb.id ? 'ring-2 ring-black/25 scale-105' : 'hover:opacity-80'
+                    }`}
+                    style={{ backgroundColor: nb.color }}
+                  >
+                    <Book size={10} className="text-black/50" />
+                    <span className="text-black/70">{nb.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="pt-1">
             <button
               type="submit"
               className="w-full py-3 bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white rounded-xl font-semibold text-sm transition-all shadow-sm shadow-blue-900/20"
             >
-              {t('create_task')}
+              {isEditing ? 'Save Changes' : t('create_task')}
             </button>
           </div>
         </form>

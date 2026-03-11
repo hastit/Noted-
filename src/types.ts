@@ -9,6 +9,7 @@ export interface Task {
   status: TaskStatus;
   startedAt?: string;
   finishedAt?: string;
+  notebookId?: string;
 }
 
 export interface Note {
@@ -23,6 +24,7 @@ export interface Notebook {
   id: string;
   title: string;
   color: string;
+  emoji?: string;
   folderId?: string;
   createdAt: string;
   lastUsedAt: string;

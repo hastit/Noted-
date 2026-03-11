@@ -1,13 +1,23 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Check, Folder, Search, MoreVertical, Book, ChevronRight, ChevronDown, X, Save, Trash2, Type, Heading1, Heading2, Heading3, Image as ImageIcon, FileText, ArrowLeft, Upload, List, ListOrdered, ListTodo } from 'lucide-react';
+import { Plus, Check, Folder, Search, MoreVertical, Book, ChevronRight, ChevronDown, X, Save, Trash2, Type, Heading1, Heading2, Heading3, Image as ImageIcon, FileText, ArrowLeft, Upload, List, ListOrdered, ListTodo, CheckSquare } from 'lucide-react';
 import { MOCK_NOTEBOOKS, MOCK_FOLDERS, MOCK_NOTES, MOCK_QUICK_NOTES } from '../constants';
-import { Notebook, Folder as FolderType, Note, PDFFile, QuickNote } from '../types';
-import { useLanguage } from '../context/LanguageContext';
+import { Notebook, Folder as FolderType, Note, PDFFile, QuickNote, Task } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 
 const NOTEBOOK_COLORS = [
   '#DDE6FF', '#FFF9E7', '#D9FFF3', '#FFD9DC', '#E8D9FF', '#F4F4F4'
+];
+
+const EMOJI_OPTIONS = [
+  '📚', '📖', '📝', '✏️', '🖊️', '📓', '📔', '📒', '📕', '📗', '📘', '📙',
+  '🔬', '🧪', '🧬', '🧫', '🔭', '⚗️', '🧲', '💡', '🔋', '⚡',
+  '📐', '📏', '🧮', '➕', '➖', '🔢',
+  '🎨', '🎭', '🎬', '🎵', '🎸', '🎹', '🎺', '🎻', '🖌️',
+  '🌱', '🌿', '🌍', '🌊', '☀️', '🌙', '⭐', '🌸',
+  '🏆', '💯', '🎯', '🚀', '🔑', '💎', '🧠', '💻', '🖥️', '📱',
+  '🏛️', '⚔️', '🗺️', '🌐', '🏺', '📜', '🗿',
+  '🐾', '🦁', '🐬', '🦋', '🌺', '🍃', '🦊',
 ];
 
 interface NoteBlock {
@@ -62,19 +72,24 @@ interface NotesProps {
   onQuickNotesChange: (quickNotes: QuickNote[]) => void;
   initialNotebookId?: string | null;
   onClearInitialNotebook?: () => void;
+  tasks?: Task[];
+  onTasksChange?: (tasks: Task[]) => void;
+  onNavigateToTasks?: () => void;
 }
 
-export default function Notes({ 
-  notebooks, 
-  folders, 
-  notes, 
+export default function Notes({
+  notebooks,
+  folders,
+  notes,
   quickNotes,
-  onNotebooksChange, 
-  onFoldersChange, 
+  onNotebooksChange,
+  onFoldersChange,
   onNotesChange,
   onQuickNotesChange,
   initialNotebookId,
-  onClearInitialNotebook
+  onClearInitialNotebook,
+  tasks = [],
+  onNavigateToTasks
 }: NotesProps) {
   const { t } = useLanguage();
   const [pdfs, setPdfs] = useState<PDFFile[]>([]);
@@ -93,6 +108,7 @@ export default function Notes({
   const [newNotebookTitle, setNewNotebookTitle] = useState('');
   const [newFolderTitle, setNewFolderTitle] = useState('');
   const [newNotebookColor, setNewNotebookColor] = useState(NOTEBOOK_COLORS[0]);
+  const [newNotebookEmoji, setNewNotebookEmoji] = useState<string>('');
 
   const [folderTab, setFolderTab] = useState<'todays' | 'week' | 'month'>('week');
   const [noteTab, setNoteTab] = useState<'todays' | 'week' | 'month'>('todays');
@@ -287,12 +303,14 @@ export default function Notes({
       id: Math.random().toString(36).substr(2, 9),
       title: newNotebookTitle,
       color: newNotebookColor,
+      emoji: newNotebookEmoji || undefined,
       folderId: selectedFolder?.id,
       createdAt: new Date().toISOString(),
       lastUsedAt: new Date().toISOString(),
     };
     onNotebooksChange([...notebooks, newNb]);
     setNewNotebookTitle('');
+    setNewNotebookEmoji('');
     setIsCreatingNotebook(false);
   };
 
@@ -600,70 +618,87 @@ export default function Notes({
                 </div>
               </section>
 
-              {/* Notebooks (Original) */}
+              {/* Notebooks */}
               <section className="pb-12">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-2xl font-display font-bold">{t('notebooks')}</h2>
-                  <button 
+                  <button
                     onClick={() => setIsCreatingNotebook(true)}
-                    className="w-10 h-10 bg-black text-white rounded-xl flex items-center justify-center hover:scale-105 transition-transform"
+                    className="w-9 h-9 bg-black text-white rounded-xl flex items-center justify-center hover:scale-105 transition-transform"
                   >
-                    <Plus size={20} />
+                    <Plus size={18} />
                   </button>
                 </div>
-                <div className="flex gap-6 overflow-x-auto no-scrollbar pb-4">
+                <div className="grid grid-cols-4 gap-5">
                   {filteredNotebooks.map((notebook, i) => {
                     const count = notes.filter(n => n.notebookId === notebook.id).length;
+                    const recentNote = notes.filter(n => n.notebookId === notebook.id).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
                     return (
                       <motion.div
                         key={notebook.id}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.1 }}
-                        whileHover={{ y: -8 }}
-                        onClick={() => {
-                          setSelectedNotebook(notebook);
-                          setSelectedNote(null);
-                        }}
-                        className="flex-shrink-0 w-44 group cursor-pointer"
+                        transition={{ delay: i * 0.05 }}
+                        whileHover={{ y: -4 }}
+                        onClick={() => { setSelectedNotebook(notebook); setSelectedNote(null); }}
+                        className="group cursor-pointer"
                       >
-                        <div 
-                          className="aspect-[3/4] rounded-2xl shadow-lg relative overflow-hidden flex flex-col justify-between p-6"
+                        <div
+                          className="aspect-[3/4] rounded-2xl relative overflow-hidden flex flex-col shadow-sm"
                           style={{ backgroundColor: notebook.color }}
                         >
-                          <div className="absolute top-0 left-4 w-1 h-full bg-black/5" />
-                          <div className="flex justify-between items-start relative z-10">
-                            <Book size={20} className="text-black/20" />
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRenameNotebook(notebook.id);
-                                }}
-                                className="p-1 hover:bg-black/5 rounded-md text-black/20 hover:text-black/40 transition-colors"
-                              >
-                                <Type size={14} />
-                              </button>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteNotebook(notebook.id);
-                                }}
-                                className="p-1 hover:bg-red-50 rounded-md text-black/20 hover:text-red-400 transition-colors"
-                              >
-                                <Trash2 size={14} />
-                              </button>
+                          {/* Book spine */}
+                          <div className="absolute left-0 top-0 bottom-0 w-[6px]" style={{ backgroundColor: 'rgba(0,0,0,0.09)' }} />
+                          {/* Ruled lines */}
+                          <div className="absolute inset-0 flex flex-col" style={{ paddingLeft: '14px', paddingTop: '40%', paddingBottom: '30%' }}>
+                            {[...Array(5)].map((_, j) => (
+                              <div key={j} className="flex-1 border-b" style={{ borderColor: 'rgba(0,0,0,0.07)' }} />
+                            ))}
+                          </div>
+                          {/* Content */}
+                          <div className="relative z-10 flex flex-col h-full p-5">
+                            <div className="flex justify-between items-start">
+                              {notebook.emoji ? (
+                                <span className="text-2xl leading-none">{notebook.emoji}</span>
+                              ) : (
+                                <Book size={16} className="text-black/25" />
+                              )}
+                              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleRenameNotebook(notebook.id); }}
+                                  className="p-1 hover:bg-black/10 rounded text-black/30 hover:text-black/60 transition-colors"
+                                >
+                                  <Type size={11} />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteNotebook(notebook.id); }}
+                                  className="p-1 hover:bg-red-50/60 rounded text-black/30 hover:text-red-400 transition-colors"
+                                >
+                                  <Trash2 size={11} />
+                                </button>
+                              </div>
+                            </div>
+                            <div className="mt-auto">
+                              <h4 className="font-bold text-sm leading-snug mb-1">{notebook.title}</h4>
+                              {recentNote ? (
+                                <p className="text-[10px] text-black/30 truncate mb-1">{recentNote.title}</p>
+                              ) : null}
+                              <p className="text-[9px] font-bold text-black/25 uppercase tracking-wider">{count} {t('pages')}</p>
                             </div>
                           </div>
-                          <div className="relative z-10">
-                            <h4 className="font-display font-bold text-lg leading-tight">{notebook.title}</h4>
-                            <p className="text-[10px] font-bold text-black/30 uppercase tracking-wider mt-2">{count} {t('pages')}</p>
-                          </div>
-                          <div className="absolute bottom-0 right-0 w-16 h-16 bg-white/10 rounded-tl-[40px] blur-xl" />
                         </div>
                       </motion.div>
                     );
                   })}
+                  <button
+                    onClick={() => setIsCreatingNotebook(true)}
+                    className="aspect-[3/4] rounded-2xl border-2 border-dashed border-black/[0.07] flex flex-col items-center justify-center gap-2.5 text-black/20 hover:text-black/35 hover:border-black/[0.14] transition-all group"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-black/[0.04] flex items-center justify-center group-hover:bg-black/[0.07] transition-colors">
+                      <Plus size={18} />
+                    </div>
+                    <span className="font-semibold text-xs">{t('new_notebook')}</span>
+                  </button>
                 </div>
               </section>
             </div>
@@ -717,55 +752,60 @@ export default function Notes({
             <div className="flex-1 overflow-y-auto no-scrollbar">
               <div className="mb-12">
                 <h3 className="text-sm font-bold text-black/30 uppercase tracking-widest mb-6">{t('notebooks')}</h3>
-                <div className="grid grid-cols-5 gap-6">
+                <div className="grid grid-cols-5 gap-5">
                   {notebooks.filter(nb => nb.folderId === selectedFolder.id).map((notebook, i) => {
                     const count = notes.filter(n => n.notebookId === notebook.id).length;
+                    const recentNote = notes.filter(n => n.notebookId === notebook.id).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
                     return (
                       <motion.div
                         key={notebook.id}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: i * 0.1 }}
-                        whileHover={{ y: -8 }}
-                        onClick={() => {
-                          setSelectedNotebook(notebook);
-                          setSelectedNote(null);
-                        }}
+                        transition={{ delay: i * 0.05 }}
+                        whileHover={{ y: -4 }}
+                        onClick={() => { setSelectedNotebook(notebook); setSelectedNote(null); }}
                         className="group cursor-pointer"
                       >
-                        <div 
-                          className="aspect-[3/4] rounded-2xl shadow-lg relative overflow-hidden flex flex-col justify-between p-6"
+                        <div
+                          className="aspect-[3/4] rounded-2xl relative overflow-hidden flex flex-col shadow-sm"
                           style={{ backgroundColor: notebook.color }}
                         >
-                          <div className="absolute top-0 left-4 w-1 h-full bg-black/5" />
-                          <div className="flex justify-between items-start relative z-10">
-                            <Book size={20} className="text-black/20" />
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRenameNotebook(notebook.id);
-                                }}
-                                className="p-1 hover:bg-black/5 rounded-md text-black/20 hover:text-black/40 transition-colors"
-                              >
-                                <Type size={14} />
-                              </button>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteNotebook(notebook.id);
-                                }}
-                                className="p-1 hover:bg-red-50 rounded-md text-black/20 hover:text-red-400 transition-colors"
-                              >
-                                <Trash2 size={14} />
-                              </button>
+                          <div className="absolute left-0 top-0 bottom-0 w-[6px]" style={{ backgroundColor: 'rgba(0,0,0,0.09)' }} />
+                          <div className="absolute inset-0 flex flex-col" style={{ paddingLeft: '14px', paddingTop: '40%', paddingBottom: '30%' }}>
+                            {[...Array(5)].map((_, j) => (
+                              <div key={j} className="flex-1 border-b" style={{ borderColor: 'rgba(0,0,0,0.07)' }} />
+                            ))}
+                          </div>
+                          <div className="relative z-10 flex flex-col h-full p-4">
+                            <div className="flex justify-between items-start">
+                              {notebook.emoji ? (
+                                <span className="text-xl leading-none">{notebook.emoji}</span>
+                              ) : (
+                                <Book size={15} className="text-black/25" />
+                              )}
+                              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleRenameNotebook(notebook.id); }}
+                                  className="p-1 hover:bg-black/10 rounded text-black/30 hover:text-black/60 transition-colors"
+                                >
+                                  <Type size={10} />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteNotebook(notebook.id); }}
+                                  className="p-1 hover:bg-red-50/60 rounded text-black/30 hover:text-red-400 transition-colors"
+                                >
+                                  <Trash2 size={10} />
+                                </button>
+                              </div>
+                            </div>
+                            <div className="mt-auto">
+                              <h4 className="font-bold text-xs leading-snug mb-1">{notebook.title}</h4>
+                              {recentNote ? (
+                                <p className="text-[9px] text-black/30 truncate mb-1">{recentNote.title}</p>
+                              ) : null}
+                              <p className="text-[9px] font-bold text-black/25 uppercase tracking-wider">{count} {t('pages')}</p>
                             </div>
                           </div>
-                          <div className="relative z-10">
-                            <h4 className="font-display font-bold text-lg leading-tight">{notebook.title}</h4>
-                            <p className="text-[10px] font-bold text-black/30 uppercase tracking-wider mt-2">{count} {t('pages')}</p>
-                          </div>
-                          <div className="absolute bottom-0 right-0 w-16 h-16 bg-white/10 rounded-tl-[40px] blur-xl" />
                         </div>
                       </motion.div>
                     );
@@ -902,353 +942,356 @@ export default function Notes({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-white"
-            onClick={() => {
-              setSelectedNotebook(null);
-              setSelectedNote(null);
-            }}
+            className="fixed inset-0 z-[100] bg-white flex flex-col"
           >
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="w-full h-full bg-white overflow-hidden flex"
-              onClick={e => e.stopPropagation()}
-            >
-              {/* Sidebar */}
-              <motion.div 
-                animate={{ width: isSidebarOpen ? 288 : 0, opacity: isSidebarOpen ? 1 : 0 }}
-                className="border-r border-black/5 flex flex-col bg-gray-50/50 overflow-hidden"
+            {/* Top navigation bar */}
+            <div className="h-11 border-b border-black/[0.07] flex items-center px-3 gap-2 shrink-0 bg-white">
+              <button
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="p-1.5 rounded-lg text-black/25 hover:text-black/55 hover:bg-black/[0.04] transition-all"
+                title={isSidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
               >
-                <div className="p-8 flex flex-col h-full w-72">
-                  <div className="flex items-center justify-between mb-8">
-                    <button 
-                      onClick={() => setSelectedNotebook(null)}
-                      className="flex items-center gap-2 text-black/40 hover:text-black transition-colors group"
-                    >
-                      <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-                      <span className="font-bold text-xs uppercase tracking-widest">Back</span>
-                    </button>
-                  </div>
+                <List size={16} />
+              </button>
+              <div className="w-px h-4 bg-black/10 mx-0.5" />
+              <div className="flex items-center gap-1.5 min-w-0">
+                <button
+                  onClick={() => { setSelectedNotebook(null); setSelectedNote(null); }}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-md text-black/40 hover:text-black/70 hover:bg-black/[0.04] transition-all shrink-0"
+                >
+                  {selectedNotebook.emoji ? (
+                    <span className="text-sm leading-none">{selectedNotebook.emoji}</span>
+                  ) : (
+                    <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: selectedNotebook.color }} />
+                  )}
+                  <span className="text-xs font-medium">{selectedNotebook.title}</span>
+                </button>
+                {selectedNote && (
+                  <>
+                    <ChevronRight size={13} className="text-black/20 shrink-0" />
+                    <span className="text-xs font-medium text-black/55 truncate max-w-[200px]">{selectedNote.title}</span>
+                  </>
+                )}
+              </div>
+              <div className="flex-1" />
+              {selectedNote && (
+                <span className="text-[10px] text-black/20 font-medium mr-1 shrink-0">
+                  Saved {new Date(selectedNote.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+              <button
+                onClick={() => { setSelectedNotebook(null); setSelectedNote(null); }}
+                className="p-1.5 rounded-lg text-black/25 hover:text-black/55 hover:bg-black/[0.04] transition-all"
+              >
+                <X size={16} />
+              </button>
+            </div>
 
-                  <div className="flex items-center gap-3 mb-8">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: selectedNotebook.color }} />
-                    <h3 className="font-bold text-sm truncate">{selectedNotebook.title}</h3>
+            {/* Format toolbar */}
+            {selectedNote && (
+              <div className="border-b border-black/[0.05] flex items-center px-4 py-1 gap-0.5 shrink-0 bg-[#fafaf9]">
+                <button onClick={() => addBlock('h1')} title={t('add_h1')} className="px-2.5 py-1.5 rounded text-[11px] font-bold text-black/30 hover:text-black/65 hover:bg-black/[0.05] transition-all">H1</button>
+                <button onClick={() => addBlock('h2')} title={t('add_h2')} className="px-2.5 py-1.5 rounded text-[11px] font-bold text-black/30 hover:text-black/65 hover:bg-black/[0.05] transition-all">H2</button>
+                <button onClick={() => addBlock('h3')} title={t('add_h3')} className="px-2.5 py-1.5 rounded text-[11px] font-bold text-black/30 hover:text-black/65 hover:bg-black/[0.05] transition-all">H3</button>
+                <div className="w-px h-4 bg-black/10 mx-1.5" />
+                <button onClick={() => addBlock('text')} title={t('text')} className="p-1.5 rounded text-black/30 hover:text-black/65 hover:bg-black/[0.05] transition-all"><Type size={13} /></button>
+                <button onClick={() => addBlock('bullet')} title={t('add_bullet')} className="p-1.5 rounded text-black/30 hover:text-black/65 hover:bg-black/[0.05] transition-all"><List size={13} /></button>
+                <button onClick={() => addBlock('number')} title={t('add_number')} className="p-1.5 rounded text-black/30 hover:text-black/65 hover:bg-black/[0.05] transition-all"><ListOrdered size={13} /></button>
+                <button onClick={() => addBlock('todo')} title={t('add_todo')} className="p-1.5 rounded text-black/30 hover:text-black/65 hover:bg-black/[0.05] transition-all"><ListTodo size={13} /></button>
+                <button onClick={() => addBlock('toggle')} title="Toggle" className="p-1.5 rounded text-black/30 hover:text-black/65 hover:bg-black/[0.05] transition-all"><ChevronDown size={13} /></button>
+                <button onClick={() => fileInputRef.current?.click()} title="Add Image" className="p-1.5 rounded text-black/30 hover:text-black/65 hover:bg-black/[0.05] transition-all"><ImageIcon size={13} /></button>
+                <div className="flex-1" />
+                <button onClick={() => handleDeleteNote(selectedNote.id)} title="Delete page" className="p-1.5 rounded text-black/15 hover:text-red-400 hover:bg-red-50 transition-all"><Trash2 size={13} /></button>
+              </div>
+            )}
+
+            {/* Content area */}
+            <div className="flex-1 flex overflow-hidden">
+              {/* Sidebar */}
+              <motion.div
+                animate={{ width: isSidebarOpen ? 240 : 0, opacity: isSidebarOpen ? 1 : 0 }}
+                className="border-r border-black/[0.06] flex flex-col bg-[#f7f6f3] overflow-hidden shrink-0"
+              >
+                <div className="flex flex-col h-full w-60">
+                  <div className="px-3 pt-5 pb-2">
+                    <div className="flex items-center gap-2 px-2 py-1">
+                      {selectedNotebook.emoji ? (
+                        <span className="text-base leading-none shrink-0">{selectedNotebook.emoji}</span>
+                      ) : (
+                        <div className="w-4 h-4 rounded-sm shrink-0" style={{ backgroundColor: selectedNotebook.color }} />
+                      )}
+                      <span className="font-semibold text-sm text-black/65 truncate">{selectedNotebook.title}</span>
+                    </div>
                   </div>
-                  
-                  <div className="flex-1 flex flex-col gap-1 overflow-y-auto no-scrollbar">
+                  <div className="px-4 mb-1.5">
+                    <p className="text-[10px] font-semibold text-black/25 uppercase tracking-wider">Pages</p>
+                  </div>
+                  <div className="flex-1 overflow-y-auto no-scrollbar px-2">
                     {notebookNotes.map(note => (
-                      <div 
+                      <button
                         key={note.id}
                         onClick={() => setSelectedNote(note)}
-                        className={`px-4 py-3 rounded-2xl text-sm font-medium transition-all cursor-pointer flex items-center justify-between group ${
-                          selectedNote?.id === note.id ? 'bg-black text-white shadow-md' : 'text-black/40 hover:bg-black/5'
+                        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left group transition-all ${
+                          selectedNote?.id === note.id
+                            ? 'bg-black/[0.08] text-black'
+                            : 'text-black/40 hover:bg-black/[0.04] hover:text-black/65'
                         }`}
                       >
-                        <span className="truncate flex-1">{note.title}</span>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteNote(note.id);
-                          }}
-                          className={`opacity-0 group-hover:opacity-100 transition-opacity ${selectedNote?.id === note.id ? 'text-white/40 hover:text-white' : 'text-black/10 hover:text-black'}`}
+                        <FileText size={13} className="shrink-0 opacity-50" />
+                        <span className="flex-1 text-[13px] truncate font-medium">{note.title}</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteNote(note.id); }}
+                          className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-black/20 hover:text-red-400 transition-all shrink-0"
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={11} />
                         </button>
-                      </div>
+                      </button>
                     ))}
-                    
                     {notebookNotes.length === 0 && (
-                      <div className="py-8 text-center text-black/20 italic text-xs">
-                        No pages yet.
-                      </div>
+                      <p className="py-10 text-center text-[11px] text-black/20 italic">No pages yet</p>
                     )}
                   </div>
-                  
-                  <button 
-                    onClick={() => handleCreateNote(selectedNotebook.id)}
-                    className="mt-6 flex items-center justify-center gap-2 py-3 bg-black/5 hover:bg-black/10 rounded-2xl transition-colors group"
-                  >
-                    <Plus size={16} className="text-black/40 group-hover:text-black transition-colors" />
-                    <span className="text-xs font-bold uppercase tracking-wider text-black/40 group-hover:text-black transition-colors">New Page</span>
-                  </button>
+                  <div className="px-2 pb-2 pt-2 border-t border-black/[0.06]">
+                    <button
+                      onClick={() => handleCreateNote(selectedNotebook.id)}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] text-black/35 hover:bg-black/[0.04] hover:text-black/55 transition-all"
+                    >
+                      <Plus size={14} />
+                      <span>New page</span>
+                    </button>
+                  </div>
+                  {/* Linked Tasks */}
+                  {(() => {
+                    const linkedTasks = tasks.filter(t => t.notebookId === selectedNotebook.id);
+                    return (
+                      <div className="border-t border-black/[0.06] px-4 pt-3 pb-3">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <p className="text-[10px] font-semibold text-black/25 uppercase tracking-wider">Linked Tasks</p>
+                          {linkedTasks.length > 0 && onNavigateToTasks && (
+                            <button
+                              onClick={onNavigateToTasks}
+                              className="text-[10px] text-black/30 hover:text-black/55 transition-colors"
+                            >
+                              View all
+                            </button>
+                          )}
+                        </div>
+                        {linkedTasks.length === 0 ? (
+                          <p className="text-[11px] text-black/20 italic py-1">No linked tasks</p>
+                        ) : (
+                          <div className="space-y-0.5">
+                            {linkedTasks.map(task => (
+                              <button
+                                key={task.id}
+                                onClick={onNavigateToTasks}
+                                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left hover:bg-black/[0.04] transition-all group"
+                              >
+                                <div className={`w-2 h-2 rounded-full shrink-0 ${
+                                  task.status === 'done' ? 'bg-emerald-400' :
+                                  task.status === 'started' ? 'bg-amber-400' : 'bg-black/20'
+                                }`} />
+                                <span className={`flex-1 text-[12px] truncate font-medium ${
+                                  task.status === 'done' ? 'line-through text-black/25' : 'text-black/50 group-hover:text-black/70'
+                                }`}>{task.title}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </motion.div>
 
               {/* Editor */}
-              <div className="flex-1 flex bg-white overflow-hidden relative">
-                {/* Sidebar Toggle Button */}
-                <button 
-                  onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                  className={`absolute left-4 top-4 z-10 p-2 rounded-xl bg-white border border-black/5 text-black/20 hover:text-black transition-all shadow-sm ${!isSidebarOpen ? 'translate-x-0' : 'translate-x-0'}`}
-                  title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
-                >
-                  <List size={18} />
-                </button>
+              <div className="flex-1 overflow-y-auto no-scrollbar">
                 {selectedNote ? (
-                  <>
-                    <div className="flex-1 p-12 overflow-y-auto no-scrollbar">
-                      <div className="max-w-3xl mx-auto w-full">
-                        <div className="flex items-center justify-between mb-12">
-                          <input 
-                            type="text"
-                            value={selectedNote.title === 'Untitled Page' ? '' : selectedNote.title}
-                            onChange={(e) => handleUpdateNoteTitle(selectedNote.id, e.target.value)}
-                            onBlur={(e) => {
-                              if (!e.target.value.trim()) {
-                                handleUpdateNoteTitle(selectedNote.id, 'Untitled Page');
-                              }
-                            }}
-                            className="text-4xl font-display font-bold bg-transparent border-none outline-none w-full placeholder:text-black/10"
-                            placeholder={t('untitled_page')}
-                            autoFocus={selectedNote.title === t('untitled_page')}
-                          />
-                          <div className="text-[10px] font-bold text-black/20 uppercase tracking-widest shrink-0 ml-4">
-                            {t('last_edited')} {new Date(selectedNote.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  <div className="max-w-2xl mx-auto px-16 pt-16 pb-40">
+                    <input
+                      type="text"
+                      value={selectedNote.title === t('untitled_page') ? '' : selectedNote.title}
+                      onChange={(e) => handleUpdateNoteTitle(selectedNote.id, e.target.value)}
+                      onBlur={(e) => { if (!e.target.value.trim()) handleUpdateNoteTitle(selectedNote.id, t('untitled_page')); }}
+                      className="w-full text-[42px] font-bold bg-transparent border-none outline-none placeholder:text-black/10 leading-tight mb-10 block"
+                      placeholder={t('untitled_page')}
+                      autoFocus={selectedNote.title === t('untitled_page')}
+                    />
+                    <div className="space-y-0.5">
+                      {currentBlocks.map((block) => (
+                        <div key={block.id} className={`group relative ${['h1', 'h2', 'h3'].includes(block.type) ? 'mt-8 mb-1' : ''}`}>
+                          <div className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => deleteBlock(block.id)}
+                              className="p-1 rounded hover:bg-red-50 text-black/10 hover:text-red-400 transition-colors"
+                            >
+                              <Trash2 size={13} />
+                            </button>
                           </div>
-                        </div>
-
-                        {/* Blocks */}
-                        <div className="space-y-2 mb-24">
-                          {currentBlocks.map((block) => (
-                            <div key={block.id} className={`group relative ${['h1', 'h2', 'h3'].includes(block.type) ? 'mt-6 mb-2' : ''}`}>
-                              <div className="absolute -left-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                                <button 
-                                  onClick={() => deleteBlock(block.id)}
-                                  className="p-1.5 rounded-lg hover:bg-red-50 text-red-300 hover:text-red-500 transition-colors"
+                          {block.type === 'h1' && (
+                            <input
+                              type="text"
+                              value={block.content}
+                              onChange={(e) => updateBlock(block.id, e.target.value)}
+                              onKeyDown={(e) => handleKeyDown(e, block)}
+                              autoFocus={focusedBlockId === block.id}
+                              onFocus={() => setFocusedBlockId(block.id)}
+                              className="w-full text-3xl font-bold bg-transparent border-none outline-none placeholder:text-black/10"
+                              placeholder={t('add_h1')}
+                            />
+                          )}
+                          {block.type === 'h2' && (
+                            <input
+                              type="text"
+                              value={block.content}
+                              onChange={(e) => updateBlock(block.id, e.target.value)}
+                              onKeyDown={(e) => handleKeyDown(e, block)}
+                              autoFocus={focusedBlockId === block.id}
+                              onFocus={() => setFocusedBlockId(block.id)}
+                              className="w-full text-2xl font-semibold bg-transparent border-none outline-none placeholder:text-black/10"
+                              placeholder={t('add_h2')}
+                            />
+                          )}
+                          {block.type === 'h3' && (
+                            <input
+                              type="text"
+                              value={block.content}
+                              onChange={(e) => updateBlock(block.id, e.target.value)}
+                              onKeyDown={(e) => handleKeyDown(e, block)}
+                              autoFocus={focusedBlockId === block.id}
+                              onFocus={() => setFocusedBlockId(block.id)}
+                              className="w-full text-xl font-semibold bg-transparent border-none outline-none placeholder:text-black/10"
+                              placeholder={t('add_h3')}
+                            />
+                          )}
+                          {block.type === 'text' && (
+                            <AutoExpandingTextarea
+                              value={block.content}
+                              onChange={(e) => updateBlock(block.id, e.target.value)}
+                              onKeyDown={(e) => handleKeyDown(e, block)}
+                              onFocus={() => setFocusedBlockId(block.id)}
+                              autoFocus={focusedBlockId === block.id}
+                              placeholder={focusedBlockId === block.id ? t('type_something') : ''}
+                              className="w-full text-[17px] leading-relaxed text-black/70 bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.6em] overflow-hidden"
+                            />
+                          )}
+                          {block.type === 'bullet' && (
+                            <div className="flex items-start gap-3">
+                              <div className="w-1.5 h-1.5 rounded-full bg-black/30 mt-[0.7em] shrink-0" />
+                              <AutoExpandingTextarea
+                                value={block.content}
+                                onChange={(e) => updateBlock(block.id, e.target.value)}
+                                onKeyDown={(e) => handleKeyDown(e, block)}
+                                onFocus={() => setFocusedBlockId(block.id)}
+                                autoFocus={focusedBlockId === block.id}
+                                placeholder={focusedBlockId === block.id ? t('list_item') : ''}
+                                className="w-full text-[17px] leading-relaxed text-black/70 bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.6em] overflow-hidden"
+                              />
+                            </div>
+                          )}
+                          {block.type === 'number' && (
+                            <div className="flex items-start gap-3">
+                              <span className="text-[17px] text-black/30 shrink-0 min-w-[1.5rem] font-medium leading-relaxed">
+                                {currentBlocks.filter((b, i) => b.type === 'number' && i <= currentBlocks.indexOf(block)).length}.
+                              </span>
+                              <AutoExpandingTextarea
+                                value={block.content}
+                                onChange={(e) => updateBlock(block.id, e.target.value)}
+                                onKeyDown={(e) => handleKeyDown(e, block)}
+                                onFocus={() => setFocusedBlockId(block.id)}
+                                autoFocus={focusedBlockId === block.id}
+                                placeholder={focusedBlockId === block.id ? t('list_item') : ''}
+                                className="w-full text-[17px] leading-relaxed text-black/70 bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.6em] overflow-hidden"
+                              />
+                            </div>
+                          )}
+                          {block.type === 'todo' && (
+                            <div className="flex items-start gap-3">
+                              <button
+                                onClick={() => updateBlock(block.id, block.content, { checked: !block.checked })}
+                                className={`mt-[0.35em] w-4 h-4 rounded border-[1.5px] flex items-center justify-center transition-all active:scale-90 shrink-0 ${
+                                  block.checked ? 'bg-black border-black text-white' : 'border-black/20 hover:border-black/40'
+                                }`}
+                              >
+                                {block.checked && <Check size={10} strokeWidth={3} />}
+                              </button>
+                              <AutoExpandingTextarea
+                                value={block.content}
+                                onChange={(e) => updateBlock(block.id, e.target.value)}
+                                onKeyDown={(e) => handleKeyDown(e, block)}
+                                onFocus={() => setFocusedBlockId(block.id)}
+                                autoFocus={focusedBlockId === block.id}
+                                placeholder={focusedBlockId === block.id ? t('todo_item') : ''}
+                                className={`w-full text-[17px] leading-relaxed bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.6em] overflow-hidden transition-all ${
+                                  block.checked ? 'text-black/25 line-through' : 'text-black/70'
+                                }`}
+                              />
+                            </div>
+                          )}
+                          {block.type === 'toggle' && (
+                            <div className="flex flex-col">
+                              <div className="flex items-start gap-2">
+                                <button
+                                  onClick={() => updateBlock(block.id, block.content, { isOpen: !block.isOpen })}
+                                  className={`mt-1 p-0.5 hover:bg-black/5 rounded transition-transform ${block.isOpen ? 'rotate-90' : ''}`}
                                 >
-                                  <Trash2 size={14} />
+                                  <ChevronRight size={16} className="text-black/35" />
                                 </button>
+                                <AutoExpandingTextarea
+                                  value={block.content}
+                                  onChange={(e) => updateBlock(block.id, e.target.value)}
+                                  onKeyDown={(e) => handleKeyDown(e, block)}
+                                  onFocus={() => setFocusedBlockId(block.id)}
+                                  autoFocus={focusedBlockId === block.id}
+                                  placeholder={focusedBlockId === block.id ? 'Toggle list' : ''}
+                                  className="w-full text-[17px] leading-relaxed font-medium text-black/70 bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.6em] overflow-hidden"
+                                />
                               </div>
-
-                              {block.type === 'h1' && (
-                                <input 
-                                  type="text"
-                                  value={block.content}
-                                  onChange={(e) => updateBlock(block.id, e.target.value)}
-                                  onKeyDown={(e) => handleKeyDown(e, block)}
-                                  autoFocus={focusedBlockId === block.id}
-                                  onFocus={() => setFocusedBlockId(block.id)}
-                                  className="w-full text-3xl font-display font-bold bg-transparent border-none outline-none placeholder:text-black/10"
-                                  placeholder={t('add_h1')}
-                                />
-                              )}
-                              {block.type === 'h2' && (
-                                <input 
-                                  type="text"
-                                  value={block.content}
-                                  onChange={(e) => updateBlock(block.id, e.target.value)}
-                                  onKeyDown={(e) => handleKeyDown(e, block)}
-                                  autoFocus={focusedBlockId === block.id}
-                                  onFocus={() => setFocusedBlockId(block.id)}
-                                  className="w-full text-2xl font-display font-bold bg-transparent border-none outline-none placeholder:text-black/10"
-                                  placeholder={t('add_h2')}
-                                />
-                              )}
-                              {block.type === 'h3' && (
-                                <input 
-                                  type="text"
-                                  value={block.content}
-                                  onChange={(e) => updateBlock(block.id, e.target.value)}
-                                  onKeyDown={(e) => handleKeyDown(e, block)}
-                                  autoFocus={focusedBlockId === block.id}
-                                  onFocus={() => setFocusedBlockId(block.id)}
-                                  className="w-full text-xl font-display font-bold bg-transparent border-none outline-none placeholder:text-black/10"
-                                  placeholder={t('add_h3')}
-                                />
-                              )}
-                              {block.type === 'text' && (
-                                <AutoExpandingTextarea 
-                                  value={block.content}
-                                  onChange={(e) => updateBlock(block.id, e.target.value)}
-                                  onKeyDown={(e) => handleKeyDown(e, block)}
-                                  onFocus={() => setFocusedBlockId(block.id)}
-                                  autoFocus={focusedBlockId === block.id}
-                                  placeholder={focusedBlockId === block.id ? t('type_something') : ""}
-                                  className="w-full text-lg font-light text-black/60 bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.5em] overflow-hidden"
-                                />
-                              )}
-                              {block.type === 'bullet' && (
-                                <div className="flex items-start gap-3">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-black/40 mt-3 shrink-0" />
-                                  <AutoExpandingTextarea 
-                                    value={block.content}
-                                    onChange={(e) => updateBlock(block.id, e.target.value)}
-                                    onKeyDown={(e) => handleKeyDown(e, block)}
-                                    onFocus={() => setFocusedBlockId(block.id)}
-                                    autoFocus={focusedBlockId === block.id}
-                                    placeholder={focusedBlockId === block.id ? t('list_item') : ""}
-                                    className="w-full text-lg font-light text-black/60 bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.5em] overflow-hidden"
-                                  />
-                                </div>
-                              )}
-                              {block.type === 'number' && (
-                                <div className="flex items-start gap-3">
-                                  <span className="text-lg font-medium text-black/20 mt-1 shrink-0 min-w-[1.5rem]">
-                                    {currentBlocks.filter((b, i) => b.type === 'number' && i <= currentBlocks.indexOf(block)).length}.
-                                  </span>
-                                  <AutoExpandingTextarea 
-                                    value={block.content}
-                                    onChange={(e) => updateBlock(block.id, e.target.value)}
-                                    onKeyDown={(e) => handleKeyDown(e, block)}
-                                    onFocus={() => setFocusedBlockId(block.id)}
-                                    autoFocus={focusedBlockId === block.id}
-                                    placeholder={focusedBlockId === block.id ? t('list_item') : ""}
-                                    className="w-full text-lg font-light text-black/60 bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.5em] overflow-hidden"
-                                  />
-                                </div>
-                              )}
-                              {block.type === 'todo' && (
-                                <div className="flex items-start gap-3">
-                                  <button 
-                                    onClick={() => updateBlock(block.id, block.content, { checked: !block.checked })}
-                                    className={`mt-2 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all active:scale-90 ${
-                                      block.checked ? 'bg-black border-black text-white' : 'border-black/10 hover:border-black/30'
-                                    }`}
-                                  >
-                                    {block.checked && <Check size={14} strokeWidth={3} />}
-                                  </button>
-                                  <AutoExpandingTextarea 
-                                    value={block.content}
-                                    onChange={(e) => updateBlock(block.id, e.target.value)}
-                                    onKeyDown={(e) => handleKeyDown(e, block)}
-                                    onFocus={() => setFocusedBlockId(block.id)}
-                                    autoFocus={focusedBlockId === block.id}
-                                    placeholder={focusedBlockId === block.id ? t('todo_item') : ""}
-                                    className={`w-full text-lg font-light bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.5em] overflow-hidden transition-all ${
-                                      block.checked ? 'text-black/20 line-through' : 'text-black/60'
-                                    }`}
-                                  />
-                                </div>
-                              )}
-                              {block.type === 'toggle' && (
-                                <div className="flex flex-col">
-                                  <div className="flex items-start gap-2">
-                                    <button 
-                                      onClick={() => updateBlock(block.id, block.content, { isOpen: !block.isOpen })}
-                                      className={`mt-2 p-0.5 hover:bg-black/5 rounded transition-transform ${block.isOpen ? 'rotate-90' : ''}`}
-                                    >
-                                      <ChevronRight size={18} className="text-black/40" />
-                                    </button>
-                                    <AutoExpandingTextarea 
-                                      value={block.content}
-                                      onChange={(e) => updateBlock(block.id, e.target.value)}
-                                      onKeyDown={(e) => handleKeyDown(e, block)}
-                                      onFocus={() => setFocusedBlockId(block.id)}
-                                      autoFocus={focusedBlockId === block.id}
-                                      placeholder={focusedBlockId === block.id ? "Toggle list" : ""}
-                                      className="w-full text-lg font-medium text-black/80 bg-transparent border-none outline-none resize-none placeholder:text-black/10 min-h-[1.5em] overflow-hidden"
-                                    />
-                                  </div>
-                                  {block.isOpen && (
-                                    <div className="ml-8 mt-2 border-l-2 border-black/5 pl-4 py-2 text-sm text-black/40 italic">
-                                      Toggle content goes here... (Nested blocks coming soon)
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                              {block.type === 'image' && (
-                                <div className="relative rounded-3xl overflow-hidden shadow-xl group/img">
-                                  <img src={block.content} alt="Note asset" className="w-full h-auto" referrerPolicy="no-referrer" />
-                                  <button 
-                                    onClick={() => deleteBlock(block.id)}
-                                    className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-full opacity-0 group-hover/img:opacity-100 transition-opacity backdrop-blur-md"
-                                  >
-                                    <X size={16} />
-                                  </button>
+                              {block.isOpen && (
+                                <div className="ml-6 mt-1 border-l-2 border-black/[0.06] pl-4 py-1 text-sm text-black/30 italic">
+                                  Toggle content...
                                 </div>
                               )}
                             </div>
-                          ))}
+                          )}
+                          {block.type === 'image' && (
+                            <div className="relative rounded-2xl overflow-hidden group/img my-2">
+                              <img src={block.content} alt="Note asset" className="w-full h-auto" referrerPolicy="no-referrer" />
+                              <button
+                                onClick={() => deleteBlock(block.id)}
+                                className="absolute top-3 right-3 p-1.5 bg-black/50 text-white rounded-lg opacity-0 group-hover/img:opacity-100 transition-opacity backdrop-blur-md"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      </div>
+                      ))}
                     </div>
-
-                    {/* Sidebar Toolbar */}
-                    <div className="w-20 border-l border-black/5 bg-gray-50/30 flex flex-col items-center py-12 gap-4">
-                      <div className="text-[10px] font-bold text-black/20 uppercase tracking-widest vertical-text mb-4">{t('tools')}</div>
-                      <button 
-                        onClick={() => addBlock('h1')}
-                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
-                        title={t('add_h1')}
-                      >
-                        <Heading1 size={20} />
-                      </button>
-                      <button 
-                        onClick={() => addBlock('h2')}
-                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
-                        title={t('add_h2')}
-                      >
-                        <Heading2 size={20} />
-                      </button>
-                      <button 
-                        onClick={() => addBlock('h3')}
-                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
-                        title={t('add_h3')}
-                      >
-                        <Heading3 size={20} />
-                      </button>
-                      <div className="w-8 h-px bg-black/5 my-2" />
-                      <button 
-                        onClick={() => addBlock('text')}
-                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
-                        title={t('text')}
-                      >
-                        <Type size={20} />
-                      </button>
-                      <button 
-                        onClick={() => addBlock('bullet')}
-                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
-                        title={t('add_bullet')}
-                      >
-                        <List size={20} />
-                      </button>
-                      <button 
-                        onClick={() => addBlock('number')}
-                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
-                        title={t('add_number')}
-                      >
-                        <ListOrdered size={20} />
-                      </button>
-                      <button 
-                        onClick={() => addBlock('todo')}
-                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
-                        title={t('add_todo')}
-                      >
-                        <ListTodo size={20} />
-                      </button>
-                      <button 
-                        onClick={() => addBlock('toggle')}
-                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
-                        title="Toggle List"
-                      >
-                        <ChevronRight size={20} />
-                      </button>
-                      <button 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-12 h-12 flex items-center justify-center hover:bg-black/5 rounded-2xl transition-all text-black/40 hover:text-black hover:scale-110 active:scale-95"
-                        title="Add Image"
-                      >
-                        <ImageIcon size={20} />
-                      </button>
-                      <input 
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleImageUpload}
-                        accept="image/*"
-                        className="hidden"
-                      />
-                    </div>
-                  </>
+                  </div>
                 ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center text-center text-black/10">
-                    <Book size={64} className="mb-4 opacity-20" />
-                    <h3 className="text-xl font-bold">Select a page to start writing</h3>
-                    <p className="text-sm mt-2">Or create a new one to capture your thoughts.</p>
+                  <div className="h-full flex flex-col items-center justify-center text-center gap-4 px-8">
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: selectedNotebook.color }}>
+                      {selectedNotebook.emoji ? (
+                        <span className="text-2xl">{selectedNotebook.emoji}</span>
+                      ) : (
+                        <Book size={24} className="text-black/40" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-black/40 mb-1">No page selected</p>
+                      <p className="text-sm text-black/25">Choose a page from the sidebar or create a new one</p>
+                    </div>
+                    <button
+                      onClick={() => handleCreateNote(selectedNotebook.id)}
+                      className="mt-1 px-5 py-2 bg-black text-white rounded-xl text-sm font-semibold hover:opacity-80 transition-opacity"
+                    >
+                      Create first page
+                    </button>
                   </div>
                 )}
               </div>
-            </motion.div>
+            </div>
+            <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
           </motion.div>
         )}
       </AnimatePresence>
@@ -1304,7 +1347,38 @@ export default function Notes({
                   </div>
                 </div>
 
-                <button 
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-[10px] font-bold text-black/30 uppercase tracking-widest">Cover Emoji <span className="normal-case font-normal">(optional)</span></label>
+                    {newNotebookEmoji && (
+                      <button onClick={() => setNewNotebookEmoji('')} className="text-[10px] text-black/30 hover:text-black/60 transition-colors">
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  {newNotebookEmoji && (
+                    <div className="flex items-center gap-3 mb-3 px-4 py-3 rounded-2xl bg-black/[0.03] border border-black/[0.06]">
+                      <span className="text-3xl">{newNotebookEmoji}</span>
+                      <span className="text-sm text-black/40 font-medium">Selected</span>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-10 gap-1 max-h-36 overflow-y-auto no-scrollbar p-1 rounded-2xl bg-black/[0.02] border border-black/[0.05]">
+                    {EMOJI_OPTIONS.map(emoji => (
+                      <button
+                        key={emoji}
+                        onClick={() => setNewNotebookEmoji(emoji === newNotebookEmoji ? '' : emoji)}
+                        className={`w-9 h-9 rounded-xl text-xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 ${
+                          newNotebookEmoji === emoji ? 'bg-black/10 scale-110' : 'hover:bg-black/[0.05]'
+                        }`}
+                        title={emoji}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
                   onClick={handleCreateNotebook}
                   className="w-full py-5 bg-black text-white rounded-3xl font-bold text-lg hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl"
                 >

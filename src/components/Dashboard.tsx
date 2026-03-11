@@ -10,9 +10,10 @@ interface DashboardProps {
   events: CalendarEvent[];
   tags: Tag[];
   onNavigate: (tab: 'dashboard' | 'tasks' | 'notes' | 'calendar' | 'settings', notebookId?: string) => void;
+  onStartFocus?: () => void;
 }
 
-export default function Dashboard({ events, tags, onNavigate }: DashboardProps) {
+export default function Dashboard({ events, tags, onNavigate, onStartFocus }: DashboardProps) {
   const { t, language } = useLanguage();
   const [greeting, setGreeting] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -60,7 +61,7 @@ export default function Dashboard({ events, tags, onNavigate }: DashboardProps) 
             New note
           </button>
           <button
-            onClick={() => onNavigate('tasks')}
+            onClick={onStartFocus}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white transition-all text-xs font-semibold shadow-sm shadow-blue-900/20"
           >
             <Play size={14} />

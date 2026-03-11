@@ -134,7 +134,7 @@ export const CalendarDayView: React.FC<CalendarDayViewProps> = ({
       {onAddEventClick && !compact && (
         <button 
           onClick={onAddEventClick}
-          className="absolute bottom-10 right-10 w-16 h-16 bg-[#FF8A80] text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-300 z-50"
+          className="absolute bottom-10 right-10 w-16 h-16 bg-black text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-300 z-50"
         >
           <Plus size={32} />
         </button>
