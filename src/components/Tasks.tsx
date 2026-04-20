@@ -16,11 +16,19 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { Task, TaskStatus, Notebook, TabType } from '../types';
 import { useLanguage } from '../context/LanguageContext';
+import { useIsMobile } from '../hooks/useIsMobile';
+import MobileFab from './MobileFab';
+
+export type RemoteTasksBridge = {
+  create: (partial: Omit<Task, 'id' | 'status'>, status: TaskStatus) => Promise<Task>;
+  update: (task: Task) => Promise<void>;
+};
 
 interface TasksProps {
   tasks: Task[];
   onTasksChange: (tasks: Task[]) => void;
   notebooks: Notebook[];
+  remoteTasks?: RemoteTasksBridge;
   onNavigate: (tab: TabType, notebookId?: string) => void;
 }
 
@@ -38,13 +46,15 @@ const COLUMN_META: Record<TaskStatus, { color: string; dot: string; label: strin
   done:    { color: 'bg-emerald-50',    dot: 'bg-emerald-500', label: '' },
 };
 
-export default function Tasks({ tasks, onTasksChange, notebooks, onNavigate }: TasksProps) {
+export default function Tasks({ tasks, onTasksChange, notebooks, remoteTasks, onNavigate }: TasksProps) {
   const { t } = useLanguage();
+  const isMobile = useIsMobile();
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalStatus, setModalStatus] = useState<TaskStatus>('todo');
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [mobileTaskTab, setMobileTaskTab] = useState<TaskStatus>('todo');
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -74,9 +84,11 @@ export default function Tasks({ tasks, onTasksChange, notebooks, onNavigate }: T
     if (!over) return;
     const taskId = active.id as string;
     const newStatus = over.id as TaskStatus;
-    onTasksChange(tasks.map(task => {
+    const prevById = new Map(tasks.map(t => [t.id, t]));
+    const prevMoved = prevById.get(taskId);
+    const next = tasks.map(task => {
       if (task.id === taskId && task.status !== newStatus) {
-        const updated = { ...task, status: newStatus };
+        const updated = {...task, status: newStatus};
         if (newStatus === 'started' && !task.startedAt)
           updated.startedAt = new Date().toISOString().split('T')[0];
         if (newStatus === 'done' && !task.finishedAt)
@@ -84,17 +96,40 @@ export default function Tasks({ tasks, onTasksChange, notebooks, onNavigate }: T
         return updated;
       }
       return task;
-    }));
+    });
+    onTasksChange(next);
+    const moved = next.find(t => t.id === taskId);
+    if (remoteTasks && moved && prevMoved && prevMoved.status !== moved.status) {
+      void remoteTasks.update(moved).catch(err => console.error(err));
+    }
   };
 
-  const handleAddTask = (taskData: Omit<Task, 'id' | 'status'>) => {
-    onTasksChange([...tasks, { ...taskData, id: Math.random().toString(36).substr(2, 9), status: modalStatus }]);
+  const handleAddTask = async (taskData: Omit<Task, 'id' | 'status'>) => {
+    if (remoteTasks) {
+      try {
+        const created = await remoteTasks.create(taskData, modalStatus);
+        onTasksChange([...tasks, created]);
+      } catch (e) {
+        console.error(e);
+      }
+    } else {
+      onTasksChange([...tasks, {...taskData, id: Math.random().toString(36).substr(2, 9), status: modalStatus}]);
+    }
     setIsModalOpen(false);
   };
 
-  const handleEditTask = (taskData: Omit<Task, 'id' | 'status'>) => {
+  const handleEditTask = async (taskData: Omit<Task, 'id' | 'status'>) => {
     if (!editingTask) return;
-    onTasksChange(tasks.map(t => t.id === editingTask.id ? { ...editingTask, ...taskData } : t));
+    const merged = {...editingTask, ...taskData};
+    if (remoteTasks) {
+      try {
+        await remoteTasks.update(merged);
+      } catch (e) {
+        console.error(e);
+        return;
+      }
+    }
+    onTasksChange(tasks.map(t => (t.id === editingTask.id ? merged : t)));
     setEditingTask(null);
   };
 
@@ -103,29 +138,192 @@ export default function Tasks({ tasks, onTasksChange, notebooks, onNavigate }: T
     setIsModalOpen(true);
   };
 
+  const setTaskStatus = (taskId: string, newStatus: TaskStatus) => {
+    const prevById = new Map(tasks.map(x => [x.id, x]));
+    const prevMoved = prevById.get(taskId);
+    const next = tasks.map(task => {
+      if (task.id === taskId && task.status !== newStatus) {
+        const updated = {...task, status: newStatus};
+        if (newStatus === 'started' && !task.startedAt)
+          updated.startedAt = new Date().toISOString().split('T')[0];
+        if (newStatus === 'done' && !task.finishedAt)
+          updated.finishedAt = new Date().toISOString().split('T')[0];
+        return updated;
+      }
+      return task;
+    });
+    onTasksChange(next);
+    const moved = next.find(x => x.id === taskId);
+    if (remoteTasks && moved && prevMoved && prevMoved.status !== moved.status) {
+      void remoteTasks.update(moved).catch(err => console.error(err));
+    }
+  };
+
   const totalDone = tasks.filter(t => t.status === 'done').length;
   const totalTasks = tasks.length;
   const progress = totalTasks > 0 ? Math.round((totalDone / totalTasks) * 100) : 0;
 
+  if (isMobile) {
+    return (
+      <div className="h-full min-h-0 flex flex-col overflow-x-hidden relative px-0 pb-1">
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="flex flex-col gap-2.5 mb-3 shrink-0 min-w-0"
+        >
+          <div className="min-w-0">
+            <h1 className="text-[20px] font-bold tracking-tight text-black truncate leading-tight">{t('tasks_title')}</h1>
+            <p className="text-[13px] text-black/45 mt-0.5 leading-snug">{t('tasks_subtitle')}</p>
+          </div>
+          <div className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-lg bg-white border border-black/[0.06]">
+            <div className="relative flex-1 h-1 bg-black/[0.06] rounded-full overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${progress}%` }}
+                transition={{ duration: 0.6, delay: 0.1, ease: [0.23, 1, 0.32, 1] }}
+                className="absolute inset-y-0 left-0 bg-[#1d4ed8] rounded-full"
+              />
+            </div>
+            <span className="text-[11px] font-semibold text-black/40 tabular-nums">{progress}%</span>
+          </div>
+
+          <div className="flex rounded-lg bg-black/[0.05] p-0.5 gap-0.5">
+            {columns.map(col => {
+              const active = mobileTaskTab === col.id;
+              return (
+                <button
+                  key={col.id}
+                  type="button"
+                  onClick={() => setMobileTaskTab(col.id)}
+                  className={`flex-1 min-h-9 rounded-md text-[11px] font-semibold transition-colors ${
+                    active ? 'bg-white text-black shadow-sm' : 'text-black/40 active:text-black/60'
+                  }`}
+                >
+                  {col.title}
+                </button>
+              );
+            })}
+          </div>
+        </motion.div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-2 [scrollbar-width:thin]">
+          {getTasksByStatus(mobileTaskTab).map(task => {
+            const linkedNotebook = notebooks.find(nb => nb.id === task.notebookId);
+            const dotClass = COLUMN_META[task.status].dot;
+            return (
+              <div
+                key={task.id}
+                className={`rounded-xl border border-black/[0.06] bg-white px-2.5 py-2.5 shadow-sm ${
+                  task.status === 'done' ? 'opacity-55' : ''
+                }`}
+              >
+                <div className="flex gap-2.5">
+                  <div className="mt-1.5 shrink-0 w-2 flex justify-center">
+                    <span className={`w-2 h-2 rounded-full ${dotClass}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => setEditingTask(task)}
+                      className="text-left w-full"
+                    >
+                      <p
+                        className={`text-[13px] font-normal leading-snug ${
+                          task.status === 'done' ? 'line-through text-black/40' : 'text-black'
+                        }`}
+                      >
+                        {task.title}
+                      </p>
+                      <p className="text-[11px] text-black/38 mt-1 flex items-center gap-1">
+                        <CalendarIcon size={11} className="shrink-0 opacity-60" />
+                        {task.dueDate}
+                      </p>
+                      {task.description ? (
+                        <p className="text-[11px] text-black/35 line-clamp-2 mt-1">{task.description}</p>
+                      ) : null}
+                    </button>
+                    {linkedNotebook && task.notebookId ? (
+                      <button
+                        type="button"
+                        onClick={() => onNavigate('notes', task.notebookId)}
+                        className="mt-1.5 text-[11px] font-medium text-[#1d4ed8]"
+                      >
+                        {linkedNotebook.title}
+                      </button>
+                    ) : null}
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {(['todo', 'started', 'done'] as const).map(s => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setTaskStatus(task.id, s)}
+                          className={`min-h-7 px-2.5 rounded-full text-[11px] font-medium border transition-colors ${
+                            task.status === s
+                              ? 'bg-black text-white border-black'
+                              : 'bg-black/[0.03] text-black/45 border-black/[0.08] active:bg-black/[0.07]'
+                          }`}
+                        >
+                          {s === 'todo' ? t('todo') : s === 'started' ? t('started') : t('done')}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {getTasksByStatus(mobileTaskTab).length === 0 && (
+            <p className="text-center text-[13px] text-black/35 py-8">{t('add_task')}</p>
+          )}
+        </div>
+
+        {!isModalOpen && !editingTask && (
+          <MobileFab label={t('new_task')} onClick={() => openModal(mobileTaskTab)} />
+        )}
+
+        <AnimatePresence>
+          {isModalOpen && (
+            <AddTaskModal
+              onClose={() => setIsModalOpen(false)}
+              onSubmit={handleAddTask}
+              initialStatus={modalStatus}
+              notebooks={notebooks}
+            />
+          )}
+          {editingTask && (
+            <AddTaskModal
+              onClose={() => setEditingTask(null)}
+              onSubmit={handleEditTask}
+              initialStatus={editingTask.status}
+              notebooks={notebooks}
+              existingTask={editingTask}
+            />
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  }
+
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full min-h-0 flex flex-col overflow-x-hidden">
 
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="flex items-end justify-between mb-7 shrink-0"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-5 sm:mb-7 shrink-0 min-w-0"
       >
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-black">{t('tasks_title')}</h1>
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-black truncate">{t('tasks_title')}</h1>
           <p className="text-black/40 text-sm mt-1">{t('tasks_subtitle')}</p>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
           {/* Progress pill */}
-          <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-white border border-black/[0.06] shadow-sm">
-            <div className="relative w-20 h-1.5 bg-black/[0.06] rounded-full overflow-hidden">
+          <div className="flex items-center gap-3 px-3 sm:px-4 py-2 rounded-xl bg-white border border-black/[0.06] shadow-sm">
+            <div className="relative w-16 sm:w-20 h-1.5 bg-black/[0.06] rounded-full overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${progress}%` }}
@@ -133,12 +331,12 @@ export default function Tasks({ tasks, onTasksChange, notebooks, onNavigate }: T
                 className="absolute inset-y-0 left-0 bg-[#1d4ed8] rounded-full"
               />
             </div>
-            <span className="text-xs font-semibold text-black/40">{progress}% done</span>
+            <span className="text-xs font-semibold text-black/40 whitespace-nowrap">{progress}% done</span>
           </div>
 
           <button
             onClick={() => openModal('todo')}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white transition-all text-xs font-semibold shadow-sm shadow-blue-900/20"
+            className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white transition-all text-xs font-semibold shadow-sm shadow-blue-900/20"
           >
             <Plus size={15} />
             {t('new_task')}
@@ -148,13 +346,14 @@ export default function Tasks({ tasks, onTasksChange, notebooks, onNavigate }: T
 
       {/* Board */}
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="flex-1 grid grid-cols-3 gap-5 overflow-hidden">
+        <div className="flex-1 min-h-0 grid grid-cols-3 gap-4 md:gap-5 overflow-hidden min-h-0">
           {columns.map((col, i) => (
             <motion.div
               key={col.id}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: i * 0.07 }}
+              className="flex flex-col min-h-0"
             >
               <Column
                 id={col.id}
@@ -213,12 +412,12 @@ function Column({ id, title, tasks, notebooks, onAddTask, onNavigate, onEditTask
   const meta = COLUMN_META[id];
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0 min-w-0">
       {/* Column header */}
-      <div className="flex items-center justify-between mb-3 px-1">
+      <div className="flex items-center justify-between mb-3 px-1 gap-2 min-w-0">
         <div className="flex items-center gap-2.5">
           <div className={`w-2 h-2 rounded-full ${meta.dot}`} />
-          <h3 className="font-semibold text-sm text-black">{title}</h3>
+          <h3 className="font-semibold text-sm text-black truncate">{title}</h3>
           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
             id === 'started' ? 'bg-[#dbeafe] text-[#1d4ed8]' :
             id === 'done'    ? 'bg-emerald-50 text-emerald-600' :
@@ -235,7 +434,7 @@ function Column({ id, title, tasks, notebooks, onAddTask, onNavigate, onEditTask
       {/* Drop zone */}
       <div
         ref={setNodeRef}
-        className={`flex-1 rounded-2xl p-3 overflow-y-auto no-scrollbar flex flex-col gap-2.5 transition-all duration-200 border ${
+        className={`flex-1 min-h-0 rounded-2xl p-3 overflow-y-auto overflow-x-hidden flex flex-col gap-2.5 transition-all duration-200 border [scrollbar-width:thin] ${
           isOver
             ? 'bg-[#dbeafe]/30 border-[#1d4ed8]/20'
             : 'bg-white border-black/[0.06] shadow-sm'
@@ -263,9 +462,14 @@ function Column({ id, title, tasks, notebooks, onAddTask, onNavigate, onEditTask
   );
 }
 
-function DraggableTaskCard({ task, linkedNotebook, onNavigateToNotebook, onEdit }: {
-  task: Task; linkedNotebook?: Notebook; onNavigateToNotebook?: () => void; onEdit?: () => void;
-}) {
+interface DraggableTaskCardProps {
+  task: Task;
+  linkedNotebook?: Notebook;
+  onNavigateToNotebook?: () => void;
+  onEdit?: () => void;
+}
+
+const DraggableTaskCard: React.FC<DraggableTaskCardProps> = ({ task, linkedNotebook, onNavigateToNotebook, onEdit }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id });
   return (
     <div
@@ -304,7 +508,7 @@ function TaskCard({ task, isDragging, linkedNotebook, onNavigateToNotebook, onEd
     >
       {/* Top row */}
       <div className="flex items-start justify-between gap-3 mb-2.5">
-        <h4 className={`font-semibold text-sm leading-snug text-black flex-1 ${task.status === 'done' ? 'line-through text-black/40' : ''}`}>
+        <h4 className={`font-semibold text-sm leading-snug text-black flex-1 min-w-0 truncate ${task.status === 'done' ? 'line-through text-black/40' : ''}`}>
           {task.title}
         </h4>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -386,7 +590,7 @@ function TaskCard({ task, isDragging, linkedNotebook, onNavigateToNotebook, onEd
 
 function AddTaskModal({ onClose, onSubmit, initialStatus, notebooks, existingTask }: {
   onClose: () => void;
-  onSubmit: (data: Omit<Task, 'id' | 'status'>) => void;
+  onSubmit: (data: Omit<Task, 'id' | 'status'>) => void | Promise<void>;
   initialStatus: TaskStatus;
   notebooks: Notebook[];
   existingTask?: Task;
@@ -399,10 +603,12 @@ function AddTaskModal({ onClose, onSubmit, initialStatus, notebooks, existingTas
   const [importance, setImportance] = useState<1|2|3|4|5>(existingTask?.importance ?? 3);
   const [notebookId, setNotebookId] = useState<string>(existingTask?.notebookId ?? '');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    onSubmit({ title, description, dueDate, importance, notebookId: notebookId || undefined });
+    await Promise.resolve(
+      onSubmit({title, description, dueDate, importance, notebookId: notebookId || undefined}),
+    );
   };
 
   return (
@@ -410,7 +616,7 @@ function AddTaskModal({ onClose, onSubmit, initialStatus, notebooks, existingTas
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-8 bg-black/10 backdrop-blur-sm"
+      className="fixed inset-0 z-[130] flex items-end md:items-center justify-center p-0 md:p-8 bg-black/10 backdrop-blur-sm md:z-[100]"
       onClick={onClose}
     >
       <motion.div
@@ -418,18 +624,18 @@ function AddTaskModal({ onClose, onSubmit, initialStatus, notebooks, existingTas
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.96, opacity: 0, y: 12 }}
         transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
-        className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-black/[0.07] overflow-hidden"
+        className="w-full max-w-md max-h-[min(90dvh,100dvh)] md:max-h-none overflow-y-auto overscroll-contain bg-white rounded-t-3xl md:rounded-2xl shadow-xl border border-black/[0.07] overflow-x-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Modal header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-black/[0.05]">
+        <div className="flex shrink-0 items-center justify-between px-6 py-5 border-b border-black/[0.05]">
           <h2 className="text-base font-semibold text-black">{isEditing ? 'Edit Task' : t('new_task')}</h2>
           <button onClick={onClose} className="w-7 h-7 rounded-lg hover:bg-black/[0.05] flex items-center justify-center transition-colors">
             <X size={15} className="text-black/40" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 max-md:pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
           <div>
             <label className="block text-[10px] font-semibold text-black/30 uppercase tracking-widest mb-2">{t('title')}</label>
             <input
@@ -453,19 +659,19 @@ function AddTaskModal({ onClose, onSubmit, initialStatus, notebooks, existingTas
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-[10px] font-semibold text-black/30 uppercase tracking-widest mb-2">{t('due_date')}</label>
               <input
                 type="date"
                 value={dueDate}
                 onChange={e => setDueDate(e.target.value)}
-                className="w-full bg-black/[0.03] border border-black/[0.07] rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#1d4ed8]/20 transition-all"
+                className="w-full min-h-11 bg-black/[0.03] border border-black/[0.07] rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#1d4ed8]/20 transition-all"
               />
             </div>
             <div>
               <label className="block text-[10px] font-semibold text-black/30 uppercase tracking-widest mb-2">{t('importance')}</label>
-              <div className="flex gap-1.5 h-[46px] items-center">
+              <div className="flex gap-1.5 min-h-11 h-auto items-center">
                 {[1, 2, 3, 4, 5].map(level => (
                   <button
                     key={level}
@@ -517,7 +723,7 @@ function AddTaskModal({ onClose, onSubmit, initialStatus, notebooks, existingTas
           <div className="pt-1">
             <button
               type="submit"
-              className="w-full py-3 bg-[#1d4ed8] hover:bg-[#1e3a8a] text-white rounded-xl font-semibold text-sm transition-all shadow-sm shadow-blue-900/20"
+              className="w-full min-h-12 py-3 bg-[#1d4ed8] active:bg-[#1e3a8a] text-white rounded-xl font-semibold text-sm transition-colors shadow-sm shadow-blue-900/20"
             >
               {isEditing ? 'Save Changes' : t('create_task')}
             </button>

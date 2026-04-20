@@ -3,7 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <title>Noted</title>
+    <!-- Recovery links must land on /reset-password so Supabase can parse the hash on that path.
+         If the project Site URL is "/" the email may open "/#access_token=…"; redirect before the app module loads. -->
+    <script>
+      (function () {
+        try {
+          var path = window.location.pathname;
+          var hash = window.location.hash;
+          if (!hash || path === '/reset-password') return;
+          var p = new URLSearchParams(hash.slice(1));
+          if (p.get('type') !== 'recovery') return;
+          if (!p.get('access_token') && !p.get('error') && !p.get('error_description')) return;
+          window.location.replace(window.location.origin + '/reset-password' + hash);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

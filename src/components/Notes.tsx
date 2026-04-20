@@ -4,6 +4,8 @@ import { Plus, Check, Folder, Search, MoreVertical, Book, ChevronRight, ChevronD
 import { MOCK_NOTEBOOKS, MOCK_FOLDERS, MOCK_NOTES, MOCK_QUICK_NOTES } from '../constants';
 import { Notebook, Folder as FolderType, Note, PDFFile, QuickNote, Task } from '../types';
 import { useLanguage } from '../context/LanguageContext';
+import { useIsMobile } from '../hooks/useIsMobile';
+import MobileFab from './MobileFab';
 
 const NOTEBOOK_COLORS = [
   '#DDE6FF', '#FFF9E7', '#D9FFF3', '#FFD9DC', '#E8D9FF', '#F4F4F4'
@@ -61,6 +63,12 @@ const AutoExpandingTextarea = ({ value, onChange, onKeyDown, onFocus, placeholde
   );
 };
 
+export type SupabaseNotesBridge = {
+  createNote: (notebookId: string, partial: {title: string; content: string}) => Promise<Note>;
+  deleteNote: (id: string) => Promise<void>;
+  persistNote: (note: Note) => void;
+};
+
 interface NotesProps {
   notebooks: Notebook[];
   folders: FolderType[];
@@ -75,6 +83,7 @@ interface NotesProps {
   tasks?: Task[];
   onTasksChange?: (tasks: Task[]) => void;
   onNavigateToTasks?: () => void;
+  supabaseNotes?: SupabaseNotesBridge;
 }
 
 export default function Notes({
@@ -89,9 +98,12 @@ export default function Notes({
   initialNotebookId,
   onClearInitialNotebook,
   tasks = [],
-  onNavigateToTasks
+  onTasksChange,
+  onNavigateToTasks,
+  supabaseNotes,
 }: NotesProps) {
   const { t } = useLanguage();
+  const isMobile = useIsMobile();
   const [pdfs, setPdfs] = useState<PDFFile[]>([]);
   
   const [selectedNotebook, setSelectedNotebook] = useState<Notebook | null>(null);
@@ -372,23 +384,42 @@ export default function Notes({
     setPdfs(prev => [...prev, newPdf]);
   };
 
-  const handleCreateNote = (notebookId: string) => {
+  const handleCreateNote = async (notebookId: string) => {
     const initialBlocks: NoteBlock[] = [{ id: 'b1', type: 'text', content: '' }];
-    const newNote: Note = {
+    const localDraft: Note = {
       id: Math.random().toString(36).substr(2, 9),
       title: t('untitled_page'),
       content: stringifyBlocks(initialBlocks),
       notebookId,
       updatedAt: new Date().toISOString(),
     };
-    onNotesChange([...notes, newNote]);
-    setSelectedNote(newNote);
+    if (supabaseNotes) {
+      try {
+        const created = await supabaseNotes.createNote(notebookId, {
+          title: localDraft.title,
+          content: localDraft.content,
+        });
+        onNotesChange([...notes, created]);
+        setSelectedNote(created);
+      } catch (e) {
+        console.error(e);
+      }
+      return;
+    }
+    onNotesChange([...notes, localDraft]);
+    setSelectedNote(localDraft);
   };
 
   const handleUpdateNote = (noteId: string, updates: Partial<Note>) => {
-    onNotesChange(notes.map(n => n.id === noteId ? { ...n, ...updates, updatedAt: new Date().toISOString() } : n));
+    const updatedAt = new Date().toISOString();
+    const nextList = notes.map(n => (n.id === noteId ? {...n, ...updates, updatedAt} : n));
+    onNotesChange(nextList);
     if (selectedNote?.id === noteId) {
-      setSelectedNote(prev => prev ? { ...prev, ...updates } : null);
+      setSelectedNote(prev => (prev ? {...prev, ...updates, updatedAt} : null));
+    }
+    const persisted = nextList.find(n => n.id === noteId);
+    if (persisted && supabaseNotes) {
+      supabaseNotes.persistNote(persisted);
     }
   };
 
@@ -408,12 +439,19 @@ export default function Notes({
     });
   };
 
-  const handleDeleteNote = (noteId: string) => {
-    if (confirm(t('delete_page_confirm'))) {
-      onNotesChange(notes.filter(n => n.id !== noteId));
-      if (selectedNote?.id === noteId) {
-        setSelectedNote(null);
+  const handleDeleteNote = async (noteId: string) => {
+    if (!confirm(t('delete_page_confirm'))) return;
+    if (supabaseNotes) {
+      try {
+        await supabaseNotes.deleteNote(noteId);
+      } catch (e) {
+        console.error(e);
+        return;
       }
+    }
+    onNotesChange(notes.filter(n => n.id !== noteId));
+    if (selectedNote?.id === noteId) {
+      setSelectedNote(null);
     }
   };
 
@@ -442,18 +480,19 @@ export default function Notes({
     return notes.filter(n => n.notebookId === selectedNotebook.id);
   }, [notes, selectedNotebook]);
 
-  // Set initial selected note when opening a notebook
+  // Set initial selected note when opening a notebook (desktop uniquement — sur mobile on affiche d’abord la liste)
   React.useEffect(() => {
+    if (isMobile) return;
     if (selectedNotebook && !selectedNote) {
       const firstNote = notes.find(n => n.notebookId === selectedNotebook.id);
       if (firstNote) {
         setSelectedNote(firstNote);
       }
     }
-  }, [selectedNotebook, notes]);
+  }, [selectedNotebook, notes, isMobile]);
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full min-h-0 flex flex-col overflow-x-hidden">
       <AnimatePresence mode="wait">
         {!selectedFolder ? (
           <motion.div
@@ -463,37 +502,39 @@ export default function Notes({
             exit={{ opacity: 0, x: -20 }}
             className="flex flex-col h-full"
           >
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h1 className="text-3xl font-display font-bold tracking-tight">{t('notes_title')}</h1>
-                <p className="text-black/40 text-sm mt-1">{t('notes_subtitle')}</p>
+            <div className="flex flex-col gap-3 max-md:gap-4 sm:flex-row sm:items-end sm:justify-between mb-6 max-md:mb-5 sm:mb-8 md:mb-4 min-w-0 max-md:pt-1">
+              <div className="min-w-0">
+                <h1 className="text-2xl max-md:text-[20px] sm:text-3xl md:text-[1.65rem] font-display font-bold tracking-tight truncate leading-tight md:leading-snug">
+                  {t('notes_title')}
+                </h1>
+                <p className="text-black/40 text-sm max-md:text-[13px] mt-0.5 max-md:mt-1 md:text-[13px] md:mt-0.5">{t('notes_subtitle')}</p>
               </div>
-              <div className="flex gap-3">
-                <div className="glass-panel px-4 py-2 rounded-2xl flex items-center gap-2">
-                  <Search size={18} className="text-black/20" />
+              <div className="flex gap-3 max-md:gap-3 shrink-0 w-full sm:w-auto">
+                <div className="glass-panel px-3 max-md:px-3 sm:px-4 py-2 max-md:h-9 max-md:py-0 max-md:rounded-xl rounded-2xl flex items-center gap-2 min-w-0 flex-1 sm:flex-initial sm:max-w-xs">
+                  <Search size={16} className="text-black/20 shrink-0" />
                   <input 
                     type="text" 
                     placeholder={t('search_notes')} 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="bg-transparent border-none outline-none text-sm w-48 placeholder:text-black/20"
+                    className="bg-transparent border-none outline-none text-sm max-md:text-[13px] w-full min-w-0 sm:w-48 placeholder:text-black/20"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto no-scrollbar space-y-12">
+            <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-visible space-y-10 max-md:space-y-6 sm:space-y-12 md:space-y-4 lg:space-y-5 [scrollbar-width:thin]">
               {/* Recent Folders */}
               <section>
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-display font-bold">{t('recent_folders')}</h2>
+                <div className="flex items-center justify-between mb-6 max-md:mb-4 md:mb-2">
+                  <h2 className="text-2xl max-md:text-[15px] md:text-lg font-display font-bold">{t('recent_folders')}</h2>
                 </div>
-                <div className="flex gap-8 mb-8 border-b border-black/5">
+                <div className="flex gap-8 max-md:gap-5 md:gap-6 mb-8 max-md:mb-5 md:mb-3 border-b border-black/5">
                   {(['todays', 'week', 'month'] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setFolderTab(tab)}
-                      className={`pb-4 text-sm font-bold uppercase tracking-widest transition-all relative ${
+                      className={`pb-4 max-md:pb-3.5 md:pb-2 text-sm max-md:text-[11px] md:text-xs font-bold uppercase tracking-widest max-md:tracking-wide md:tracking-wide transition-all relative ${
                         folderTab === tab ? 'text-black' : 'text-black/20 hover:text-black/40'
                       }`}
                     >
@@ -507,59 +548,89 @@ export default function Notes({
                     </button>
                   ))}
                 </div>
-                <div className="grid grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 max-md:grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 max-md:gap-3 sm:gap-6 md:gap-2.5 lg:gap-3 min-w-0">
                   {filterByTab(folders, folderTab).map((folder) => (
                     <motion.div 
                       key={folder.id}
                       whileHover={{ y: -5 }}
                       onClick={() => setSelectedFolder(folder)}
-                      className="p-6 rounded-[32px] shadow-sm cursor-pointer group relative overflow-hidden flex flex-col justify-between aspect-[1.4/1]"
-                      style={{ backgroundColor: folder.color || '#F4F4F4' }}
+                      className="rounded-[32px] md:rounded-xl shadow-sm cursor-pointer group relative overflow-hidden flex flex-col justify-between aspect-[1.4/1] md:aspect-[2.55/1] p-6 md:p-2.5 max-md:overflow-visible max-md:aspect-auto max-md:mt-1 max-md:h-[56px] max-md:min-h-[56px] max-md:max-h-[56px] max-md:flex-row max-md:items-center max-md:justify-between max-md:gap-3 max-md:rounded-br-lg max-md:rounded-bl-lg max-md:rounded-tr-lg max-md:rounded-tl-md max-md:border max-md:border-black/[0.06] max-md:bg-[#dfe8f0] max-md:px-3.5 max-md:py-2.5 max-md:shadow-sm max-md:before:pointer-events-none max-md:before:absolute max-md:before:left-0 max-md:before:top-0 max-md:before:z-[2] max-md:before:h-2.5 max-md:before:w-[40%] max-md:before:-translate-y-full max-md:before:rounded-t-lg max-md:before:bg-[#dfe8f0] max-md:before:content-['']"
+                      style={!isMobile ? { backgroundColor: folder.color || '#F4F4F4' } : undefined}
                     >
-                      <div className="flex justify-between items-start">
-                        <div className="w-12 h-12 rounded-2xl bg-white/40 flex items-center justify-center">
-                          <Folder size={24} className="text-black/60" />
+                      <div className="hidden md:flex flex-col justify-between h-full">
+                        <div className="flex justify-between items-start">
+                          <div className="w-8 h-8 md:w-7 md:h-7 rounded-lg bg-white/40 flex items-center justify-center">
+                            <Folder size={17} className="text-black/60 md:w-[15px] md:h-[15px]" />
+                          </div>
+                          <button type="button" className="p-1 text-black/20 hover:text-black/40 md:p-0.5">
+                            <MoreVertical size={16} className="md:w-[14px] md:h-[14px]" />
+                          </button>
                         </div>
-                        <button className="p-2 text-black/20 hover:text-black/40">
-                          <MoreVertical size={20} />
-                        </button>
+                        <div>
+                          <h4 className="font-display font-bold text-[15px] md:text-[13px] leading-tight line-clamp-1">
+                            {folder.title}
+                          </h4>
+                          <p className="text-[8px] md:text-[7px] font-bold text-black/30 uppercase tracking-wider mt-0.5 md:mt-0">
+                            {new Date(folder.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="font-display font-bold text-xl mb-1">{folder.title}</h4>
-                        <p className="text-[10px] font-bold text-black/30 uppercase tracking-widest">
-                          {new Date(folder.createdAt).toLocaleDateString()}
-                        </p>
+                      <div className="flex md:hidden items-center gap-2 min-w-0 flex-1 overflow-hidden">
+                        <div className="w-8 h-8 rounded-lg bg-white/40 flex items-center justify-center shrink-0">
+                          <Folder size={14} className="text-black/60" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-[13px] font-semibold text-black leading-tight truncate">
+                            {folder.title}
+                          </h4>
+                          <p className="text-[11px] text-black/40 truncate mt-0.5">
+                            {new Date(folder.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); }}
+                          className="shrink-0 p-1.5 rounded-md text-black/25 active:bg-black/10"
+                          aria-label="Menu"
+                        >
+                          <MoreVertical size={16} />
+                        </button>
                       </div>
                     </motion.div>
                   ))}
                   <button 
+                    type="button"
                     onClick={() => setIsCreatingFolder(true)}
-                    className="rounded-[32px] border-2 border-dashed border-black/5 flex flex-col items-center justify-center gap-3 text-black/20 hover:text-black/40 hover:border-black/10 transition-all aspect-[1.4/1]"
+                    className="rounded-[32px] md:rounded-xl border-2 border-dashed border-black/5 flex flex-col items-center justify-center gap-3 md:gap-1.5 p-6 md:p-2.5 text-black/20 hover:text-black/40 hover:border-black/10 transition-all aspect-[1.4/1] md:aspect-[2.55/1] max-md:relative max-md:overflow-visible max-md:aspect-auto max-md:mt-1 max-md:h-[56px] max-md:min-h-[56px] max-md:max-h-[56px] max-md:flex-row max-md:rounded-br-lg max-md:rounded-bl-lg max-md:rounded-tr-lg max-md:rounded-tl-md max-md:gap-3 max-md:px-3.5 max-md:py-0 max-md:justify-center max-md:bg-[#eef3f8] max-md:before:pointer-events-none max-md:before:absolute max-md:before:left-0 max-md:before:top-0 max-md:before:z-[2] max-md:before:h-2.5 max-md:before:w-[40%] max-md:before:-translate-y-full max-md:before:rounded-t-lg max-md:before:bg-[#eef3f8] max-md:before:content-['']"
                   >
-                    <div className="w-12 h-12 rounded-2xl bg-black/5 flex items-center justify-center">
-                      <Plus size={24} />
+                    <div className="w-12 h-12 md:w-7 md:h-7 rounded-2xl md:rounded-lg bg-black/5 flex items-center justify-center max-md:w-8 max-md:h-8 max-md:rounded-lg">
+                      <Plus size={isMobile ? 16 : 15} className="md:w-[15px] md:h-[15px]" />
                     </div>
-                    <span className="font-bold text-sm">{t('new_folder')}</span>
+                    <span className="font-bold text-sm max-md:text-[13px] md:text-[11px]">{t('new_folder')}</span>
                   </button>
                 </div>
               </section>
 
               {/* My Notes */}
               <section>
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-display font-bold">{t('my_notes')}</h2>
-                  <div className="flex items-center gap-4 text-black/20">
-                    <button className="p-1 hover:text-black transition-colors"><ChevronRight size={20} className="rotate-180" /></button>
-                    <span className="text-[10px] font-bold uppercase tracking-widest">February 2026</span>
-                    <button className="p-1 hover:text-black transition-colors"><ChevronRight size={20} /></button>
+                <div className="flex items-center justify-between mb-6 max-md:mb-4 md:mb-2">
+                  <h2 className="text-2xl max-md:text-[15px] md:text-lg font-display font-bold">{t('my_notes')}</h2>
+                  <div className="flex items-center gap-4 md:gap-2 text-black/20">
+                    <button type="button" className="p-1 hover:text-black transition-colors md:p-0.5" aria-label="Previous month">
+                      <ChevronRight size={18} className="rotate-180" />
+                    </button>
+                    <span className="text-[10px] md:text-[9px] font-bold uppercase tracking-widest">February 2026</span>
+                    <button type="button" className="p-1 hover:text-black transition-colors md:p-0.5" aria-label="Next month">
+                      <ChevronRight size={18} />
+                    </button>
                   </div>
                 </div>
-                <div className="flex gap-8 mb-8 border-b border-black/5">
+                <div className="flex gap-8 mb-8 max-md:mb-5 md:mb-3 md:gap-6 border-b border-black/5">
                   {(['todays', 'week', 'month'] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setNoteTab(tab)}
-                      className={`pb-4 text-sm font-bold uppercase tracking-widest transition-all relative ${
+                      className={`pb-4 max-md:pb-3.5 md:pb-2 text-sm max-md:text-[11px] md:text-xs font-bold uppercase tracking-widest max-md:tracking-wide md:tracking-wide transition-all relative ${
                         noteTab === tab ? 'text-black' : 'text-black/20 hover:text-black/40'
                       }`}
                     >
@@ -573,63 +644,69 @@ export default function Notes({
                     </button>
                   ))}
                 </div>
-                <div className="grid grid-cols-4 gap-6">
+                <div className="overflow-x-auto overflow-y-hidden pb-2 -mx-1 px-1 min-w-0 overscroll-x-contain [scrollbar-width:thin] touch-pan-x">
+                  <div className="flex flex-nowrap items-stretch gap-2 sm:gap-2 md:gap-2 w-max pr-1">
                   {filterByTab(quickNotes, noteTab).map((note) => (
                     <motion.div 
                       key={note.id}
                       whileHover={{ y: -5 }}
                       onClick={() => setSelectedQuickNote(note)}
-                      className="p-8 rounded-[40px] shadow-sm flex flex-col justify-between aspect-[0.85/1] cursor-pointer group"
+                      className="shrink-0 w-[148px] md:w-[176px] lg:w-[190px] rounded-xl shadow-sm cursor-pointer group flex flex-col justify-between aspect-[1.02/1] p-2.5 md:p-3 relative overflow-hidden"
                       style={{ backgroundColor: note.color }}
                     >
-                      <div>
-                        <p className="text-[10px] font-bold text-black/30 uppercase tracking-widest mb-4">
-                          {new Date(note.createdAt).toLocaleDateString()}
-                        </p>
-                        <div className="flex justify-between items-start mb-4">
-                          <h4 className="font-display font-bold text-xl leading-tight">{note.title}</h4>
-                          <button className="p-2 bg-black rounded-xl text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Type size={16} />
-                          </button>
+                      <div className="flex flex-col flex-1 justify-between min-h-0 gap-0.5">
+                        <div className="min-h-0">
+                          <p className="text-[7px] md:text-[8px] font-bold text-black/30 uppercase tracking-wider mb-1">
+                            {new Date(note.createdAt).toLocaleDateString()}
+                          </p>
+                          <div className="flex justify-between items-start gap-1.5 mb-1">
+                            <h4 className="font-display font-bold text-[13px] md:text-[15px] leading-snug line-clamp-1 min-w-0">{note.title}</h4>
+                            <button type="button" className="p-0.5 bg-black rounded text-white opacity-0 group-hover:opacity-100 max-md:opacity-100 transition-opacity min-h-6 min-w-6 flex items-center justify-center shrink-0">
+                              <Type size={11} />
+                            </button>
+                          </div>
+                          <p className="text-[11px] md:text-[12px] text-black/60 line-clamp-2 leading-snug">
+                            {note.content}
+                          </p>
                         </div>
-                        <p className="text-sm text-black/60 line-clamp-4 leading-relaxed">
-                          {note.content}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 text-black/30">
-                        <div className="w-4 h-4 rounded-full border border-black/20 flex items-center justify-center">
-                          <div className="w-1.5 h-1.5 rounded-full bg-black/40" />
+                        <div className="flex items-center gap-1 text-black/30 pt-0.5">
+                          <div className="w-2.5 h-2.5 rounded-full border border-black/20 flex items-center justify-center shrink-0">
+                            <div className="w-1 h-1 rounded-full bg-black/40" />
+                          </div>
+                          <span className="text-[7px] md:text-[8px] font-bold uppercase tracking-wider truncate">
+                            {new Date(note.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, {new Date(note.createdAt).toLocaleDateString([], { weekday: 'short' })}
+                          </span>
                         </div>
-                        <span className="text-[10px] font-bold uppercase tracking-widest">
-                          {new Date(note.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, {new Date(note.createdAt).toLocaleDateString([], { weekday: 'long' })}
-                        </span>
                       </div>
                     </motion.div>
                   ))}
                   <button 
+                    type="button"
                     onClick={handleCreateQuickNote}
-                    className="rounded-[40px] border-2 border-dashed border-black/5 flex flex-col items-center justify-center gap-3 text-black/20 hover:text-black/40 hover:border-black/10 transition-all aspect-[0.85/1]"
+                    className="shrink-0 w-[148px] md:w-[176px] lg:w-[190px] rounded-xl border-2 border-dashed border-black/5 flex flex-col items-center justify-center gap-1.5 md:gap-2 p-2.5 md:p-3 text-black/20 hover:text-black/40 hover:border-black/10 transition-all aspect-[1.02/1] bg-[#faf6e8]/80"
                   >
-                    <div className="w-12 h-12 rounded-2xl bg-black/5 flex items-center justify-center">
-                      <Plus size={24} />
+                    <div className="w-7 h-7 md:w-8 md:h-8 rounded-md bg-black/5 flex items-center justify-center">
+                      <Plus size={16} className="md:w-[18px] md:h-[18px]" />
                     </div>
-                    <span className="font-bold text-sm">{t('new_note')}</span>
+                    <span className="font-bold text-[11px] md:text-xs">{t('new_note')}</span>
                   </button>
+                  </div>
                 </div>
               </section>
 
               {/* Notebooks */}
-              <section className="pb-12">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-display font-bold">{t('notebooks')}</h2>
+              <section className="pb-12 max-md:pb-10 max-md:pt-0 md:pb-6">
+                <div className="flex items-center justify-between mb-6 max-md:mb-4 md:mb-2">
+                  <h2 className="text-2xl max-md:text-[15px] md:text-lg font-display font-bold">{t('notebooks')}</h2>
                   <button
                     onClick={() => setIsCreatingNotebook(true)}
-                    className="w-9 h-9 bg-black text-white rounded-xl flex items-center justify-center hover:scale-105 transition-transform"
+                    className="w-9 h-9 md:w-8 md:h-8 bg-black text-white rounded-xl md:rounded-lg flex items-center justify-center hover:scale-105 transition-transform"
                   >
-                    <Plus size={18} />
+                    <Plus size={17} />
                   </button>
                 </div>
-                <div className="grid grid-cols-4 gap-5">
+                <div className="overflow-x-auto overflow-y-hidden pb-2 -mx-1 px-1 min-w-0 overscroll-x-contain [scrollbar-width:thin] touch-pan-x">
+                  <div className="flex flex-nowrap items-stretch gap-2 max-md:gap-2 sm:gap-2 md:gap-2 w-max pr-1">
                   {filteredNotebooks.map((notebook, i) => {
                     const count = notes.filter(n => n.notebookId === notebook.id).length;
                     const recentNote = notes.filter(n => n.notebookId === notebook.id).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
@@ -641,49 +718,55 @@ export default function Notes({
                         transition={{ delay: i * 0.05 }}
                         whileHover={{ y: -4 }}
                         onClick={() => { setSelectedNotebook(notebook); setSelectedNote(null); }}
-                        className="group cursor-pointer"
+                        className="group cursor-pointer shrink-0 w-[122px] md:w-[146px] lg:w-[158px]"
                       >
                         <div
-                          className="aspect-[3/4] rounded-2xl relative overflow-hidden flex flex-col shadow-sm"
+                          className="aspect-[3/4] rounded-lg relative overflow-hidden flex flex-col shadow-sm w-full min-w-0"
                           style={{ backgroundColor: notebook.color }}
                         >
-                          {/* Book spine */}
-                          <div className="absolute left-0 top-0 bottom-0 w-[6px]" style={{ backgroundColor: 'rgba(0,0,0,0.09)' }} />
-                          {/* Ruled lines */}
-                          <div className="absolute inset-0 flex flex-col" style={{ paddingLeft: '14px', paddingTop: '40%', paddingBottom: '30%' }}>
+                          <div className="absolute left-0 top-0 bottom-0 h-full w-[5px] md:w-1.5 bg-black/[0.09]" />
+                          <div
+                            className="absolute inset-0 flex flex-col"
+                            style={{ paddingLeft: '12px', paddingTop: '40%', paddingBottom: '30%' }}
+                          >
                             {[...Array(5)].map((_, j) => (
                               <div key={j} className="flex-1 border-b" style={{ borderColor: 'rgba(0,0,0,0.07)' }} />
                             ))}
                           </div>
-                          {/* Content */}
-                          <div className="relative z-10 flex flex-col h-full p-5">
-                            <div className="flex justify-between items-start">
-                              {notebook.emoji ? (
-                                <span className="text-2xl leading-none">{notebook.emoji}</span>
-                              ) : (
-                                <Book size={16} className="text-black/25" />
-                              )}
-                              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="relative z-10 flex flex-col h-full p-3 md:p-3.5 gap-1 md:gap-1.5">
+                            <div className="flex justify-between items-start gap-2">
+                              <div className="shrink-0">
+                                {notebook.emoji ? (
+                                  <span className="text-lg md:text-xl leading-none">{notebook.emoji}</span>
+                                ) : (
+                                  <Book size={16} className="text-black/25 scale-[0.82] origin-top-left md:scale-90 md:w-[18px] md:h-[18px]" />
+                                )}
+                              </div>
+                              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 max-md:opacity-100 transition-opacity shrink-0">
                                 <button
+                                  type="button"
                                   onClick={(e) => { e.stopPropagation(); handleRenameNotebook(notebook.id); }}
                                   className="p-1 hover:bg-black/10 rounded text-black/30 hover:text-black/60 transition-colors"
                                 >
-                                  <Type size={11} />
+                                  <Type size={11} className="md:w-3 md:h-3" />
                                 </button>
                                 <button
+                                  type="button"
                                   onClick={(e) => { e.stopPropagation(); handleDeleteNotebook(notebook.id); }}
                                   className="p-1 hover:bg-red-50/60 rounded text-black/30 hover:text-red-400 transition-colors"
                                 >
-                                  <Trash2 size={11} />
+                                  <Trash2 size={11} className="md:w-3 md:h-3" />
                                 </button>
                               </div>
                             </div>
-                            <div className="mt-auto">
-                              <h4 className="font-bold text-sm leading-snug mb-1">{notebook.title}</h4>
+                            <div className="mt-auto min-w-0 min-h-0">
+                              <h4 className="font-bold text-xs md:text-[13px] leading-tight line-clamp-2 mb-0">{notebook.title}</h4>
                               {recentNote ? (
-                                <p className="text-[10px] text-black/30 truncate mb-1">{recentNote.title}</p>
+                                <p className="text-[8px] md:text-[9px] text-black/30 truncate mb-0 line-clamp-1">{recentNote.title}</p>
                               ) : null}
-                              <p className="text-[9px] font-bold text-black/25 uppercase tracking-wider">{count} {t('pages')}</p>
+                              <p className="text-[8px] md:text-[9px] font-bold text-black/25 uppercase tracking-wide">
+                                {count} {t('pages')}
+                              </p>
                             </div>
                           </div>
                         </div>
@@ -691,14 +774,16 @@ export default function Notes({
                     );
                   })}
                   <button
+                    type="button"
                     onClick={() => setIsCreatingNotebook(true)}
-                    className="aspect-[3/4] rounded-2xl border-2 border-dashed border-black/[0.07] flex flex-col items-center justify-center gap-2.5 text-black/20 hover:text-black/35 hover:border-black/[0.14] transition-all group"
+                    className="shrink-0 w-[122px] md:w-[146px] lg:w-[158px] aspect-[3/4] rounded-lg border-2 border-dashed border-black/[0.07] flex flex-col items-center justify-center gap-1.5 md:gap-2 p-3 md:p-3.5 text-black/20 hover:text-black/35 hover:border-black/[0.14] transition-all group bg-[#f6f7f9]"
                   >
-                    <div className="w-9 h-9 rounded-xl bg-black/[0.04] flex items-center justify-center group-hover:bg-black/[0.07] transition-colors">
-                      <Plus size={18} />
+                    <div className="w-7 h-7 md:w-8 md:h-8 rounded-md bg-black/[0.04] flex items-center justify-center group-hover:bg-black/[0.07] transition-colors">
+                      <Plus size={15} className="md:w-[17px] md:h-[17px]" />
                     </div>
-                    <span className="font-semibold text-xs">{t('new_notebook')}</span>
+                    <span className="font-semibold text-[11px] md:text-xs">{t('new_notebook')}</span>
                   </button>
+                  </div>
                 </div>
               </section>
             </div>
@@ -711,8 +796,8 @@ export default function Notes({
             exit={{ opacity: 0, x: 20 }}
             className="flex flex-col h-full"
           >
-            <div className="flex items-center justify-between mb-8">
-              <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-4 max-md:gap-5 sm:flex-row sm:items-center sm:justify-between mb-6 max-md:mb-6 sm:mb-8 min-w-0 max-md:pt-1">
+              <div className="flex items-center gap-3 max-md:gap-3.5 sm:gap-4 min-w-0">
                 <button 
                   onClick={() => setSelectedFolder(null)}
                   className="w-10 h-10 rounded-xl bg-black/5 flex items-center justify-center hover:bg-black/10 transition-colors"
@@ -720,11 +805,11 @@ export default function Notes({
                   <ArrowLeft size={20} />
                 </button>
                 <div>
-                  <h1 className="text-3xl font-display font-bold tracking-tight">{selectedFolder.title}</h1>
-                  <p className="text-black/40 text-sm mt-1">{t('manage_notebooks')}</p>
+                  <h1 className="text-3xl max-md:text-2xl font-display font-bold tracking-tight">{selectedFolder.title}</h1>
+                  <p className="text-black/40 text-sm max-md:text-[13px] mt-1 max-md:mt-1.5">{t('manage_notebooks')}</p>
                 </div>
               </div>
-              <div className="flex gap-3">
+              <div className="flex gap-3 max-md:gap-2.5 max-md:flex-wrap">
                 <button 
                   onClick={() => pdfInputRef.current?.click()}
                   className="px-6 h-12 bg-black/5 text-black/60 rounded-2xl flex items-center gap-2 hover:bg-black/10 transition-colors font-bold text-sm"
@@ -749,10 +834,16 @@ export default function Notes({
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto no-scrollbar">
-              <div className="mb-12">
-                <h3 className="text-sm font-bold text-black/30 uppercase tracking-widest mb-6">{t('notebooks')}</h3>
-                <div className="grid grid-cols-5 gap-5">
+            <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-visible [scrollbar-width:thin]">
+              <div className="mb-12 max-md:mb-14">
+                <h3 className="text-sm font-bold text-black/30 uppercase tracking-widest mb-6 max-md:mb-5">{t('notebooks')}</h3>
+                {notebooks.filter(nb => nb.folderId === selectedFolder.id).length === 0 ? (
+                  <div className="py-12 text-center glass-panel rounded-[32px] border-2 border-dashed border-black/5 text-black/20">
+                    {t('no_notebooks')}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto overflow-y-hidden pb-2 -mx-1 px-1 min-w-0 overscroll-x-contain [scrollbar-width:thin] touch-pan-x">
+                    <div className="flex flex-nowrap items-stretch gap-2 max-md:gap-2 sm:gap-2 md:gap-2 w-max pr-1">
                   {notebooks.filter(nb => nb.folderId === selectedFolder.id).map((notebook, i) => {
                     const count = notes.filter(n => n.notebookId === notebook.id).length;
                     const recentNote = notes.filter(n => n.notebookId === notebook.id).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
@@ -764,70 +855,76 @@ export default function Notes({
                         transition={{ delay: i * 0.05 }}
                         whileHover={{ y: -4 }}
                         onClick={() => { setSelectedNotebook(notebook); setSelectedNote(null); }}
-                        className="group cursor-pointer"
+                        className="group cursor-pointer shrink-0 w-[122px] md:w-[146px] lg:w-[158px]"
                       >
                         <div
-                          className="aspect-[3/4] rounded-2xl relative overflow-hidden flex flex-col shadow-sm"
+                          className="aspect-[3/4] rounded-lg relative overflow-hidden flex flex-col shadow-sm w-full min-w-0"
                           style={{ backgroundColor: notebook.color }}
                         >
-                          <div className="absolute left-0 top-0 bottom-0 w-[6px]" style={{ backgroundColor: 'rgba(0,0,0,0.09)' }} />
-                          <div className="absolute inset-0 flex flex-col" style={{ paddingLeft: '14px', paddingTop: '40%', paddingBottom: '30%' }}>
+                          <div className="absolute left-0 top-0 bottom-0 h-full w-[5px] md:w-1.5 bg-black/[0.09]" />
+                          <div
+                            className="absolute inset-0 flex flex-col"
+                            style={{ paddingLeft: '12px', paddingTop: '40%', paddingBottom: '30%' }}
+                          >
                             {[...Array(5)].map((_, j) => (
                               <div key={j} className="flex-1 border-b" style={{ borderColor: 'rgba(0,0,0,0.07)' }} />
                             ))}
                           </div>
-                          <div className="relative z-10 flex flex-col h-full p-4">
-                            <div className="flex justify-between items-start">
-                              {notebook.emoji ? (
-                                <span className="text-xl leading-none">{notebook.emoji}</span>
-                              ) : (
-                                <Book size={15} className="text-black/25" />
-                              )}
-                              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="relative z-10 flex flex-col h-full p-3 md:p-3.5 gap-1 md:gap-1.5">
+                            <div className="flex justify-between items-start gap-2">
+                              <div className="shrink-0">
+                                {notebook.emoji ? (
+                                  <span className="text-lg md:text-xl leading-none">{notebook.emoji}</span>
+                                ) : (
+                                  <Book size={16} className="text-black/25 scale-[0.82] origin-top-left md:scale-90 md:w-[18px] md:h-[18px]" />
+                                )}
+                              </div>
+                              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 max-md:opacity-100 transition-opacity shrink-0">
                                 <button
+                                  type="button"
                                   onClick={(e) => { e.stopPropagation(); handleRenameNotebook(notebook.id); }}
                                   className="p-1 hover:bg-black/10 rounded text-black/30 hover:text-black/60 transition-colors"
                                 >
-                                  <Type size={10} />
+                                  <Type size={11} className="md:w-3 md:h-3" />
                                 </button>
                                 <button
+                                  type="button"
                                   onClick={(e) => { e.stopPropagation(); handleDeleteNotebook(notebook.id); }}
                                   className="p-1 hover:bg-red-50/60 rounded text-black/30 hover:text-red-400 transition-colors"
                                 >
-                                  <Trash2 size={10} />
+                                  <Trash2 size={11} className="md:w-3 md:h-3" />
                                 </button>
                               </div>
                             </div>
-                            <div className="mt-auto">
-                              <h4 className="font-bold text-xs leading-snug mb-1">{notebook.title}</h4>
+                            <div className="mt-auto min-w-0 min-h-0">
+                              <h4 className="font-bold text-xs md:text-[13px] leading-tight line-clamp-2 mb-0">{notebook.title}</h4>
                               {recentNote ? (
-                                <p className="text-[9px] text-black/30 truncate mb-1">{recentNote.title}</p>
+                                <p className="text-[8px] md:text-[9px] text-black/30 truncate mb-0 line-clamp-1">{recentNote.title}</p>
                               ) : null}
-                              <p className="text-[9px] font-bold text-black/25 uppercase tracking-wider">{count} {t('pages')}</p>
+                              <p className="text-[8px] md:text-[9px] font-bold text-black/25 uppercase tracking-wide">
+                                {count} {t('pages')}
+                              </p>
                             </div>
                           </div>
                         </div>
                       </motion.div>
                     );
                   })}
-                  {notebooks.filter(nb => nb.folderId === selectedFolder.id).length === 0 && (
-                    <div className="col-span-full py-12 text-center glass-panel rounded-[32px] border-2 border-dashed border-black/5 text-black/20">
-                      {t('no_notebooks')}
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
 
               <div>
-                <h3 className="text-sm font-bold text-black/30 uppercase tracking-widest mb-6">{t('documents')}</h3>
-                <div className="grid grid-cols-4 gap-6">
+                <h3 className="text-sm font-bold text-black/30 uppercase tracking-widest mb-6 max-md:mb-5">{t('documents')}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 max-md:gap-3 min-w-0">
                   {pdfs.filter(pdf => pdf.folderId === selectedFolder.id).map((pdf) => (
                     <div 
                       key={pdf.id}
                       onClick={() => setSelectedPdf(pdf)}
-                      className="glass-panel p-6 rounded-[32px] flex items-center justify-between group cursor-pointer hover:bg-white/60 transition-all"
+                      className="glass-panel p-6 max-md:p-6 rounded-[32px] max-md:rounded-2xl flex items-center justify-between gap-3 max-md:gap-4 group cursor-pointer hover:bg-white/60 transition-all"
                     >
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-4 max-md:gap-5">
                         <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center text-red-500">
                           <FileText size={20} />
                         </div>
@@ -864,22 +961,22 @@ export default function Notes({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/20 backdrop-blur-sm p-8"
+            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/20 backdrop-blur-sm p-8 max-md:p-4 max-md:items-center max-md:justify-center"
             onClick={() => setSelectedQuickNote(null)}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="w-full max-w-lg rounded-[40px] p-12 shadow-2xl relative overflow-hidden"
+              className="w-full max-w-lg rounded-[40px] p-12 shadow-2xl relative overflow-hidden max-md:flex max-md:flex-col max-md:min-h-[70vh] max-md:max-h-[90vh] max-md:p-6 max-md:rounded-3xl max-md:overflow-hidden"
               style={{ backgroundColor: selectedQuickNote.color }}
               onClick={e => e.stopPropagation()}
             >
-              <div className="flex justify-between items-start mb-8">
-                <p className="text-[10px] font-bold text-black/30 uppercase tracking-widest">
+              <div className="flex justify-between items-start mb-8 max-md:mb-4 max-md:shrink-0">
+                <p className="text-[10px] font-bold text-black/30 uppercase tracking-widest max-md:text-[11px] max-md:leading-snug max-md:pr-2">
                   {new Date(selectedQuickNote.createdAt).toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                 </p>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <button 
                     onClick={() => handleDeleteQuickNote(selectedQuickNote.id)}
                     className="p-2 text-black/20 hover:text-red-500 transition-colors"
@@ -901,7 +998,7 @@ export default function Notes({
                     handleUpdateQuickNote(selectedQuickNote.id, { title: 'Untitled Note' });
                   }
                 }}
-                className="w-full text-3xl font-display font-bold bg-transparent border-none outline-none mb-6 placeholder:text-black/10"
+                className="w-full text-3xl font-display font-bold bg-transparent border-none outline-none mb-6 placeholder:text-black/10 max-md:text-2xl max-md:mb-4 max-md:shrink-0"
                 placeholder="Untitled Note"
                 autoFocus={selectedQuickNote.title === 'Untitled Note'}
               />
@@ -909,16 +1006,16 @@ export default function Notes({
               <textarea 
                 value={selectedQuickNote.content}
                 onChange={(e) => handleUpdateQuickNote(selectedQuickNote.id, { content: e.target.value })}
-                className="w-full text-lg text-black/60 bg-transparent border-none outline-none resize-none h-64 placeholder:text-black/10 leading-relaxed"
+                className="w-full text-lg text-black/60 bg-transparent border-none outline-none resize-none h-64 placeholder:text-black/10 leading-relaxed max-md:flex-1 max-md:min-h-0 max-md:h-auto max-md:overflow-y-auto max-md:resize-none max-md:text-base max-md:[scrollbar-width:thin]"
                 placeholder="Type your note here..."
               />
 
-              <div className="mt-8 pt-8 border-t border-black/5 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-black flex items-center justify-center text-white">
+              <div className="mt-8 pt-8 border-t border-black/5 flex items-center justify-between max-md:mt-5 max-md:pt-5 max-md:shrink-0 max-md:gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl bg-black flex items-center justify-center text-white shrink-0 max-md:w-9 max-md:h-9 max-md:rounded-xl">
                     <Type size={20} />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-[10px] font-bold text-black/40 uppercase tracking-widest">Last Modified</p>
                     <p className="text-xs font-bold">
                       {new Date(selectedQuickNote.lastUsedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -927,7 +1024,7 @@ export default function Notes({
                 </div>
                 <button 
                   onClick={() => setSelectedQuickNote(null)}
-                  className="px-8 py-3 bg-black text-white rounded-2xl font-bold text-sm shadow-lg shadow-black/10 hover:scale-105 transition-transform"
+                  className="px-8 py-3 bg-black text-white rounded-2xl font-bold text-sm shadow-lg shadow-black/10 hover:scale-105 transition-transform shrink-0 max-md:px-5 max-md:py-2.5 max-md:text-[13px]"
                 >
                   Save Note
                 </button>
@@ -942,18 +1039,39 @@ export default function Notes({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-white flex flex-col"
+            className="fixed inset-0 z-[100] bg-white flex flex-col min-h-0 overflow-hidden"
           >
             {/* Top navigation bar */}
-            <div className="h-11 border-b border-black/[0.07] flex items-center px-3 gap-2 shrink-0 bg-white">
-              <button
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="p-1.5 rounded-lg text-black/25 hover:text-black/55 hover:bg-black/[0.04] transition-all"
-                title={isSidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-              >
-                <List size={16} />
-              </button>
-              <div className="w-px h-4 bg-black/10 mx-0.5" />
+            <div className="min-h-[48px] h-11 max-md:min-h-[52px] border-b border-black/[0.07] flex items-center px-2 max-md:px-3 sm:px-3 gap-1 max-md:gap-2 sm:gap-2 shrink-0 bg-white min-w-0">
+              {isMobile && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedNote) setSelectedNote(null);
+                    else {
+                      setSelectedNotebook(null);
+                      setSelectedNote(null);
+                    }
+                  }}
+                  className="min-h-11 min-w-11 shrink-0 flex items-center justify-center rounded-xl text-black/45 active:bg-black/[0.06]"
+                  aria-label="Retour"
+                >
+                  <ArrowLeft size={22} />
+                </button>
+              )}
+              {!isMobile && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                    className="p-1.5 rounded-lg text-black/25 hover:text-black/55 hover:bg-black/[0.04] transition-all"
+                    title={isSidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+                  >
+                    <List size={16} />
+                  </button>
+                  <div className="w-px h-4 bg-black/10 mx-0.5" />
+                </>
+              )}
               <div className="flex items-center gap-1.5 min-w-0">
                 <button
                   onClick={() => { setSelectedNotebook(null); setSelectedNote(null); }}
@@ -989,7 +1107,7 @@ export default function Notes({
 
             {/* Format toolbar */}
             {selectedNote && (
-              <div className="border-b border-black/[0.05] flex items-center px-4 py-1 gap-0.5 shrink-0 bg-[#fafaf9]">
+              <div className="border-b border-black/[0.05] flex flex-wrap md:flex-nowrap items-center px-2 max-md:px-3 sm:px-4 py-2 max-md:py-2.5 gap-1 max-md:gap-1.5 shrink-0 bg-[#fafaf9] overflow-x-hidden md:overflow-x-auto overflow-y-hidden [scrollbar-width:thin] min-w-0">
                 <button onClick={() => addBlock('h1')} title={t('add_h1')} className="px-2.5 py-1.5 rounded text-[11px] font-bold text-black/30 hover:text-black/65 hover:bg-black/[0.05] transition-all">H1</button>
                 <button onClick={() => addBlock('h2')} title={t('add_h2')} className="px-2.5 py-1.5 rounded text-[11px] font-bold text-black/30 hover:text-black/65 hover:bg-black/[0.05] transition-all">H2</button>
                 <button onClick={() => addBlock('h3')} title={t('add_h3')} className="px-2.5 py-1.5 rounded text-[11px] font-bold text-black/30 hover:text-black/65 hover:bg-black/[0.05] transition-all">H3</button>
@@ -1006,13 +1124,14 @@ export default function Notes({
             )}
 
             {/* Content area */}
-            <div className="flex-1 flex overflow-hidden">
-              {/* Sidebar */}
+            <div className="flex-1 min-h-0 flex overflow-hidden min-w-0">
+              {/* Sidebar (desktop) */}
+              {!isMobile && (
               <motion.div
                 animate={{ width: isSidebarOpen ? 240 : 0, opacity: isSidebarOpen ? 1 : 0 }}
-                className="border-r border-black/[0.06] flex flex-col bg-[#f7f6f3] overflow-hidden shrink-0"
+                className="border-r border-black/[0.06] flex flex-col bg-[#f7f6f3] overflow-hidden shrink-0 max-w-[85vw] sm:max-w-none"
               >
-                <div className="flex flex-col h-full w-60">
+                <div className="flex flex-col h-full w-60 min-w-[240px] overflow-y-auto overflow-x-hidden [scrollbar-width:thin]">
                   <div className="px-3 pt-5 pb-2">
                     <div className="flex items-center gap-2 px-2 py-1">
                       {selectedNotebook.emoji ? (
@@ -1040,8 +1159,9 @@ export default function Notes({
                         <FileText size={13} className="shrink-0 opacity-50" />
                         <span className="flex-1 text-[13px] truncate font-medium">{note.title}</span>
                         <button
+                          type="button"
                           onClick={(e) => { e.stopPropagation(); handleDeleteNote(note.id); }}
-                          className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-black/20 hover:text-red-400 transition-all shrink-0"
+                          className="opacity-0 max-md:opacity-100 md:opacity-0 md:group-hover:opacity-100 min-h-9 min-w-9 flex items-center justify-center p-0.5 rounded text-black/30 md:text-black/20 md:hover:text-red-400 transition-all shrink-0"
                         >
                           <Trash2 size={11} />
                         </button>
@@ -1053,7 +1173,7 @@ export default function Notes({
                   </div>
                   <div className="px-2 pb-2 pt-2 border-t border-black/[0.06]">
                     <button
-                      onClick={() => handleCreateNote(selectedNotebook.id)}
+                      onClick={() => void handleCreateNote(selectedNotebook.id)}
                       className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[13px] text-black/35 hover:bg-black/[0.04] hover:text-black/55 transition-all"
                     >
                       <Plus size={14} />
@@ -1102,27 +1222,81 @@ export default function Notes({
                   })()}
                 </div>
               </motion.div>
+              )}
 
-              {/* Editor */}
-              <div className="flex-1 overflow-y-auto no-scrollbar">
-                {selectedNote ? (
-                  <div className="max-w-2xl mx-auto px-16 pt-16 pb-40">
+              {/* Liste pages (mobile) ou éditeur */}
+              <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden [scrollbar-width:thin]">
+                {isMobile && selectedNotebook && !selectedNote ? (
+                  <div className="flex flex-col min-h-0 px-4 py-3">
+                    <div className="px-0 py-3 border-b border-black/[0.06] mb-4">
+                      <p className="text-xs font-semibold text-black/35 uppercase tracking-wider">{t('my_notes')}</p>
+                      <p className="text-sm font-semibold text-black truncate">{selectedNotebook.title}</p>
+                    </div>
+                    <div className="flex flex-col gap-2.5">
+                      {notebookNotes.map(note => (
+                        <div key={note.id} className="flex items-stretch gap-2 min-h-[52px]">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedNote(note)}
+                            className="flex-1 min-h-[52px] flex items-center gap-3.5 rounded-xl px-4 text-left border border-transparent bg-white shadow-sm active:bg-black/[0.04] transition-colors"
+                          >
+                            <FileText size={18} className="shrink-0 text-black/35" />
+                            <span className="flex-1 text-sm font-medium text-black truncate">{note.title}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteNote(note.id)}
+                            className="min-h-[52px] min-w-[52px] shrink-0 flex items-center justify-center rounded-xl border border-black/[0.08] bg-white text-black/25 active:bg-red-50 active:text-red-500"
+                            aria-label="Supprimer"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    {notebookNotes.length === 0 && (
+                      <div className="flex flex-col items-center justify-center py-14 text-center gap-4 px-4">
+                        <p className="text-sm text-black/40">No pages yet</p>
+                        <button
+                          type="button"
+                          onClick={() => void handleCreateNote(selectedNotebook.id)}
+                          className="w-full min-h-12 rounded-xl bg-black text-white text-sm font-semibold"
+                        >
+                          Create first page
+                        </button>
+                      </div>
+                    )}
+                    {notebookNotes.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => void handleCreateNote(selectedNotebook.id)}
+                        className="mt-6 w-full min-h-[52px] rounded-xl border border-black/[0.1] text-sm font-semibold text-black/70 active:bg-black/[0.04]"
+                      >
+                        + New page
+                      </button>
+                    )}
+                  </div>
+                ) : selectedNote ? (
+                  <div className={`max-w-2xl mx-auto min-w-0 ${isMobile ? 'px-5 pt-8 pb-32' : 'px-4 sm:px-8 md:px-12 lg:px-16 pt-8 sm:pt-12 lg:pt-16 pb-24 sm:pb-32 lg:pb-40'}`}>
                     <input
                       type="text"
                       value={selectedNote.title === t('untitled_page') ? '' : selectedNote.title}
                       onChange={(e) => handleUpdateNoteTitle(selectedNote.id, e.target.value)}
                       onBlur={(e) => { if (!e.target.value.trim()) handleUpdateNoteTitle(selectedNote.id, t('untitled_page')); }}
-                      className="w-full text-[42px] font-bold bg-transparent border-none outline-none placeholder:text-black/10 leading-tight mb-10 block"
+                      className={`w-full font-bold bg-transparent border-none outline-none placeholder:text-black/10 leading-tight mb-6 sm:mb-10 block ${
+                        isMobile ? 'text-2xl' : 'text-[42px]'
+                      }`}
                       placeholder={t('untitled_page')}
                       autoFocus={selectedNote.title === t('untitled_page')}
                     />
                     <div className="space-y-0.5">
                       {currentBlocks.map((block) => (
                         <div key={block.id} className={`group relative ${['h1', 'h2', 'h3'].includes(block.type) ? 'mt-8 mb-1' : ''}`}>
-                          <div className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 max-md:opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                             <button
+                              type="button"
                               onClick={() => deleteBlock(block.id)}
-                              className="p-1 rounded hover:bg-red-50 text-black/10 hover:text-red-400 transition-colors"
+                              className="min-h-10 min-w-10 md:min-h-0 md:min-w-0 flex items-center justify-center p-2 rounded-lg active:bg-red-50 text-black/35 md:text-black/10 md:hover:text-red-400 transition-colors"
                             >
                               <Trash2 size={13} />
                             </button>
@@ -1257,8 +1431,9 @@ export default function Notes({
                             <div className="relative rounded-2xl overflow-hidden group/img my-2">
                               <img src={block.content} alt="Note asset" className="w-full h-auto" referrerPolicy="no-referrer" />
                               <button
+                                type="button"
                                 onClick={() => deleteBlock(block.id)}
-                                className="absolute top-3 right-3 p-1.5 bg-black/50 text-white rounded-lg opacity-0 group-hover/img:opacity-100 transition-opacity backdrop-blur-md"
+                                className="absolute top-3 right-3 min-h-11 min-w-11 flex items-center justify-center p-1.5 bg-black/50 text-white rounded-lg opacity-0 max-md:opacity-100 md:opacity-0 md:group-hover/img:opacity-100 transition-opacity backdrop-blur-md"
                               >
                                 <X size={14} />
                               </button>
@@ -1282,7 +1457,7 @@ export default function Notes({
                       <p className="text-sm text-black/25">Choose a page from the sidebar or create a new one</p>
                     </div>
                     <button
-                      onClick={() => handleCreateNote(selectedNotebook.id)}
+                      onClick={() => void handleCreateNote(selectedNotebook.id)}
                       className="mt-1 px-5 py-2 bg-black text-white rounded-xl text-sm font-semibold hover:opacity-80 transition-opacity"
                     >
                       Create first page
@@ -1303,26 +1478,26 @@ export default function Notes({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[110] flex items-center justify-center p-8 bg-black/20 backdrop-blur-sm"
+            className="fixed inset-0 z-[110] flex items-center justify-center p-8 max-md:p-4 bg-black/20 backdrop-blur-sm"
             onClick={() => setIsCreatingNotebook(false)}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="w-full max-w-md bg-white rounded-[40px] p-10 shadow-2xl border border-black/5"
+              className="w-full max-w-md bg-white rounded-[40px] p-10 max-md:p-6 max-md:rounded-3xl shadow-2xl border border-black/5"
               onClick={e => e.stopPropagation()}
             >
-              <div className="flex justify-between items-center mb-8">
+              <div className="flex justify-between items-center mb-8 max-md:mb-5">
                 <h2 className="text-2xl font-display font-bold">New Notebook</h2>
                 <button onClick={() => setIsCreatingNotebook(false)} className="text-black/20 hover:text-black transition-colors">
                   <X size={24} />
                 </button>
               </div>
 
-              <div className="space-y-8">
+              <div className="space-y-8 max-md:space-y-6">
                 <div>
-                  <label className="text-[10px] font-bold text-black/30 uppercase tracking-widest mb-3 block">Notebook Title</label>
+                  <label className="text-[10px] font-bold text-black/30 uppercase tracking-widest mb-3 max-md:mb-3.5 block">Notebook Title</label>
                   <input 
                     type="text"
                     autoFocus
@@ -1362,7 +1537,7 @@ export default function Notes({
                       <span className="text-sm text-black/40 font-medium">Selected</span>
                     </div>
                   )}
-                  <div className="grid grid-cols-10 gap-1 max-h-36 overflow-y-auto no-scrollbar p-1 rounded-2xl bg-black/[0.02] border border-black/[0.05]">
+                  <div className="grid grid-cols-6 sm:grid-cols-8 lg:grid-cols-10 gap-1 max-h-36 overflow-y-auto overflow-x-hidden [scrollbar-width:thin] p-1 rounded-2xl bg-black/[0.02] border border-black/[0.05]">
                     {EMOJI_OPTIONS.map(emoji => (
                       <button
                         key={emoji}
@@ -1396,17 +1571,17 @@ export default function Notes({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[120] flex items-center justify-center p-8 bg-black/40 backdrop-blur-md"
+            className="fixed inset-0 z-[120] flex items-center justify-center p-8 max-md:p-3 bg-black/40 backdrop-blur-md"
             onClick={() => setSelectedPdf(null)}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="w-full max-w-6xl h-full bg-white rounded-[40px] overflow-hidden shadow-2xl flex flex-col border border-black/5"
+              className="w-full max-w-6xl h-full bg-white rounded-[40px] max-md:rounded-2xl overflow-hidden shadow-2xl flex flex-col border border-black/5"
               onClick={e => e.stopPropagation()}
             >
-              <div className="px-8 py-6 border-bottom border-black/5 flex items-center justify-between bg-gray-50/50">
+              <div className="px-8 max-md:px-4 py-6 max-md:py-4 border-bottom border-black/5 flex items-center justify-between bg-gray-50/50">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center text-red-500">
                     <FileText size={20} />
@@ -1423,7 +1598,7 @@ export default function Notes({
                   <X size={20} />
                 </button>
               </div>
-              <div className="flex-1 bg-gray-100 p-8 overflow-hidden">
+              <div className="flex-1 bg-gray-100 p-8 max-md:p-3 overflow-hidden">
                 <iframe 
                   src={selectedPdf.url} 
                   className="w-full h-full rounded-2xl shadow-inner bg-white border-none"
@@ -1441,26 +1616,26 @@ export default function Notes({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[110] flex items-center justify-center p-8 bg-black/20 backdrop-blur-sm"
+            className="fixed inset-0 z-[110] flex items-center justify-center p-8 max-md:p-4 bg-black/20 backdrop-blur-sm"
             onClick={() => setIsCreatingFolder(false)}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="w-full max-w-md bg-white rounded-[40px] p-10 shadow-2xl border border-black/5"
+              className="w-full max-w-md bg-white rounded-[40px] p-10 max-md:p-6 max-md:rounded-3xl shadow-2xl border border-black/5"
               onClick={e => e.stopPropagation()}
             >
-              <div className="flex justify-between items-center mb-8">
+              <div className="flex justify-between items-center mb-8 max-md:mb-5">
                 <h2 className="text-2xl font-display font-bold">New Folder</h2>
                 <button onClick={() => setIsCreatingFolder(false)} className="text-black/20 hover:text-black transition-colors">
                   <X size={24} />
                 </button>
               </div>
 
-              <div className="space-y-8">
+              <div className="space-y-8 max-md:space-y-6">
                 <div>
-                  <label className="text-[10px] font-bold text-black/30 uppercase tracking-widest mb-3 block">Folder Title</label>
+                  <label className="text-[10px] font-bold text-black/30 uppercase tracking-widest mb-3 max-md:mb-3.5 block">Folder Title</label>
                   <input 
                     type="text"
                     autoFocus
@@ -1482,6 +1657,21 @@ export default function Notes({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {isMobile &&
+        !selectedFolder &&
+        !selectedQuickNote &&
+        !isCreatingNotebook &&
+        !isCreatingFolder &&
+        !selectedPdf && (
+          <MobileFab
+            label={t('new_note')}
+            onClick={() => {
+              if (selectedNotebook) void handleCreateNote(selectedNotebook.id);
+              else handleCreateQuickNote();
+            }}
+          />
+        )}
     </div>
   );
 }

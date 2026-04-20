@@ -220,21 +220,24 @@ function PlantScene({ progress, mode }: { progress: number; mode: Mode }) {
       {progress > 0.97 && (
         <>
           {[
-            { x: 68, y: tipY - 18, s: 0.7 },
-            { x: 132, y: tipY - 22, s: 0.5 },
-            { x: 145, y: tipY + 5, s: 0.6 },
-            { x: 58, y: tipY + 8, s: 0.5 },
+            { x: 68, y: tipY - 18, s: 0.8, delay: '0s' },
+            { x: 132, y: tipY - 22, s: 0.6, delay: '0.4s' },
+            { x: 145, y: tipY + 5, s: 0.7, delay: '0.8s' },
+            { x: 58, y: tipY + 8, s: 0.55, delay: '1.2s' },
           ].map((sp, i) => (
-            <motion.text
+            <text
               key={i}
               x={sp.x} y={sp.y}
               fontSize={14 * sp.s}
               textAnchor="middle"
-              animate={{ y: [sp.y, sp.y - 5, sp.y], opacity: [0.6, 1, 0.6] }}
-              transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.3 }}
+              fill="#fbbf24"
+              style={{
+                animation: `sparkle-float 1.5s ease-in-out infinite`,
+                animationDelay: sp.delay,
+              }}
             >
               ✦
-            </motion.text>
+            </text>
           ))}
         </>
       )}
@@ -244,7 +247,14 @@ function PlantScene({ progress, mode }: { progress: number; mode: Mode }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function PomodoroTimer({ onClose }: { onClose: () => void }) {
+export default function PomodoroTimer({
+  onClose,
+  embedded = false,
+}: {
+  onClose?: () => void;
+  /** Intégré au dashboard : flux normal, pas de plein écran */
+  embedded?: boolean;
+}) {
   const [mode, setMode] = useState<Mode>('focus');
   const [timeLeft, setTimeLeft] = useState(MODES.focus.duration);
   const [isRunning, setIsRunning] = useState(false);
@@ -309,36 +319,55 @@ export default function PomodoroTimer({ onClose }: { onClose: () => void }) {
   const focusSessionsDone = sessions % 4;
 
   return (
-    <div className="h-full w-full flex flex-col items-center justify-center">
-      {/* Back */}
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="w-full max-w-[420px] mb-5 flex items-center"
-      >
-        <button
-          onClick={onClose}
-          className="flex items-center gap-2 text-black/40 hover:text-black/70 transition-colors text-sm font-medium"
+    <div
+      className={
+        embedded
+          ? 'w-full min-h-0 flex flex-col items-stretch overflow-x-hidden py-0 [scrollbar-width:thin]'
+          : 'h-full min-h-0 w-full flex flex-col items-center max-md:justify-start md:justify-center overflow-y-auto overflow-x-hidden py-3 px-3 max-md:pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:py-4 [scrollbar-width:thin]'
+      }
+    >
+      {/* Retour plein écran uniquement */}
+      {!embedded && onClose && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="w-full max-w-[420px] mb-3 max-md:mb-3 md:mb-5 flex items-center shrink-0"
         >
-          <ArrowLeft size={15} />
-          Back to Dashboard
-        </button>
-      </motion.div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex items-center gap-2 text-black/40 hover:text-black/70 transition-colors text-[13px] md:text-sm font-medium"
+          >
+            <ArrowLeft size={15} />
+            Back to Dashboard
+          </button>
+        </motion.div>
+      )}
 
       <motion.div
-        initial={{ opacity: 0, y: 20, scale: 0.97 }}
+        initial={{ opacity: 0, y: embedded ? 8 : 20, scale: embedded ? 1 : 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
-        className="w-full max-w-[420px] bg-white rounded-3xl shadow-xl border border-black/[0.06] overflow-hidden"
+        transition={{ duration: embedded ? 0.3 : 0.45, ease: [0.23, 1, 0.32, 1] }}
+        className={
+          embedded
+            ? 'w-full shrink-0 bg-white rounded-2xl shadow-md border border-black/[0.06] overflow-hidden'
+            : 'w-full max-w-[420px] shrink-0 bg-white rounded-2xl max-md:rounded-2xl md:rounded-3xl shadow-xl border border-black/[0.06] max-md:overflow-visible md:overflow-hidden'
+        }
       >
         {/* Mode tabs */}
-        <div className="flex px-5 gap-2 pt-5">
+        <div
+          className={
+            embedded
+              ? 'flex px-4 sm:px-6 gap-2 pt-4 sm:pt-5'
+              : 'flex px-3 max-md:px-3 md:px-5 gap-1.5 max-md:gap-1.5 md:gap-2 pt-3 max-md:pt-3 md:pt-5'
+          }
+        >
           {(Object.keys(MODES) as Mode[]).map(m => (
             <button
               key={m}
               onClick={() => switchMode(m)}
-              className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all ${
+              className={`flex-1 py-2 max-md:py-1.5 rounded-lg max-md:rounded-lg md:rounded-xl text-[11px] max-md:text-[11px] md:text-xs font-semibold transition-all ${
                 mode === m ? 'text-white shadow-sm' : 'text-black/30 hover:bg-black/[0.04] hover:text-black/55'
               }`}
               style={mode === m ? { backgroundColor: currentMode.color } : {}}
@@ -348,26 +377,45 @@ export default function PomodoroTimer({ onClose }: { onClose: () => void }) {
           ))}
         </div>
 
-        <div className="flex px-5 pt-3 pb-5 gap-6 items-end">
-          {/* Plant */}
-          <div className="w-44 h-56 shrink-0">
+        {/* Mobile : colonne ; desktop / mode intégré : ligne */}
+        <div
+          className={
+            embedded
+              ? 'flex flex-col sm:flex-row px-4 sm:px-6 pt-4 pb-6 sm:pb-8 gap-8 sm:gap-10 items-center sm:items-end justify-center sm:justify-between min-w-0'
+              : 'flex flex-col md:flex-row px-3 max-md:px-3 md:px-5 pt-2 max-md:pt-2 md:pt-3 pb-4 max-md:pb-4 md:pb-5 gap-3 max-md:gap-3 md:gap-6 md:items-end min-w-0'
+          }
+        >
+          {/* Plante */}
+          <div
+            className={
+              embedded
+                ? 'w-[11rem] h-[13.5rem] sm:w-48 sm:h-[14.5rem] shrink-0'
+                : 'w-[7.5rem] h-[9.25rem] max-md:mx-auto md:w-44 md:h-56 shrink-0 max-md:max-h-[40vh]'
+            }
+          >
             <PlantScene progress={progress} mode={mode} />
           </div>
 
-          {/* Right: time + controls */}
-          <div className="flex-1 flex flex-col items-center gap-4 pb-2">
+          {/* Timer + contrôles */}
+          <div
+            className={
+              embedded
+                ? 'flex-1 min-w-0 w-full max-w-md flex flex-col items-center gap-3 sm:gap-4 pb-0.5'
+                : 'flex-1 min-h-0 flex flex-col items-center gap-2.5 max-md:gap-2.5 md:gap-4 pb-1 max-md:pb-1 md:pb-2 w-full'
+            }
+          >
             {/* Time display */}
             <div
-              className="w-full rounded-2xl py-4 flex flex-col items-center"
+              className="w-full rounded-xl max-md:rounded-xl md:rounded-2xl py-3 max-md:py-3 md:py-4 flex flex-col items-center"
               style={{ backgroundColor: currentMode.bg }}
             >
               <span
-                className="text-[46px] font-bold tabular-nums tracking-tight leading-none"
+                className="text-[2.25rem] max-md:text-[2.25rem] md:text-[46px] font-bold tabular-nums tracking-tight leading-none"
                 style={{ color: currentMode.color }}
               >
                 {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
               </span>
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em] mt-1.5" style={{ color: `${currentMode.color}99` }}>
+              <span className="text-[9px] max-md:text-[9px] md:text-[10px] font-bold uppercase tracking-[0.18em] mt-1 max-md:mt-1 md:mt-1.5" style={{ color: `${currentMode.color}99` }}>
                 {currentMode.label}
               </span>
             </div>
@@ -385,21 +433,21 @@ export default function PomodoroTimer({ onClose }: { onClose: () => void }) {
                 />
               ))}
             </div>
-            <span className="text-[10px] text-black/25 font-medium -mt-2">{sessions} sessions done</span>
+            <span className="text-[10px] text-black/25 font-medium -mt-1 md:-mt-2">{sessions} sessions done</span>
 
-            {/* Controls */}
-            <div className="flex items-center gap-3">
+            {/* Controls — toujours visibles sous le chrono sur mobile */}
+            <div className="flex items-center justify-center gap-3 max-md:gap-3 pt-1 max-md:pt-1 w-full">
               <button
                 onClick={handleReset}
-                className="w-9 h-9 rounded-xl bg-black/[0.04] hover:bg-black/[0.08] flex items-center justify-center text-black/35 hover:text-black/60 transition-all active:scale-95"
+                className="w-10 h-10 max-md:w-10 max-md:h-10 md:w-9 md:h-9 rounded-xl bg-black/[0.04] hover:bg-black/[0.08] flex items-center justify-center text-black/35 hover:text-black/60 transition-all active:scale-95 shrink-0"
                 title="Reset"
               >
-                <RotateCcw size={14} />
+                <RotateCcw size={15} />
               </button>
 
               <button
                 onClick={() => setIsRunning(r => !r)}
-                className="w-14 h-14 rounded-2xl flex items-center justify-center text-white transition-all hover:scale-105 active:scale-95"
+                className="w-[3.25rem] h-[3.25rem] max-md:w-[3.25rem] max-md:h-[3.25rem] md:w-14 md:h-14 rounded-2xl flex items-center justify-center text-white transition-all hover:scale-105 active:scale-95 shrink-0"
                 style={{
                   backgroundColor: currentMode.color,
                   boxShadow: `0 8px 24px ${currentMode.color}45`,
@@ -410,15 +458,15 @@ export default function PomodoroTimer({ onClose }: { onClose: () => void }) {
 
               <button
                 onClick={handleSkip}
-                className="w-9 h-9 rounded-xl bg-black/[0.04] hover:bg-black/[0.08] flex items-center justify-center text-black/35 hover:text-black/60 transition-all active:scale-95"
+                className="w-10 h-10 max-md:w-10 max-md:h-10 md:w-9 md:h-9 rounded-xl bg-black/[0.04] hover:bg-black/[0.08] flex items-center justify-center text-black/35 hover:text-black/60 transition-all active:scale-95 shrink-0"
                 title="Skip"
               >
-                <SkipForward size={14} />
+                <SkipForward size={15} />
               </button>
             </div>
 
             {/* Status */}
-            <p className="text-[10px] text-black/25 font-medium text-center leading-relaxed">
+            <p className="text-[10px] text-black/25 font-medium text-center leading-relaxed px-1 max-md:px-1 pb-0.5">
               {mode === 'focus'
                 ? `${4 - focusSessionsDone} more until long break`
                 : mode === 'short' ? 'Short break — you earned it!'

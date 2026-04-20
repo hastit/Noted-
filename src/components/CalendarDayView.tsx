@@ -10,6 +10,8 @@ interface CalendarDayViewProps {
   currentDate: Date;
   onAddEventClick?: () => void;
   compact?: boolean;
+  /** Timeline jour plein écran, compact (mobile calendrier) */
+  denseMobile?: boolean;
 }
 
 const formatDate = (date: Date) => {
@@ -24,9 +26,11 @@ export const CalendarDayView: React.FC<CalendarDayViewProps> = ({
   tags, 
   currentDate, 
   onAddEventClick,
-  compact = false
+  compact = false,
+  denseMobile = false,
 }) => {
   const { t } = useLanguage();
+  const dense = denseMobile && !compact;
   const dateStr = formatDate(currentDate);
   const dayEvents = events
     .filter(e => e.date === dateStr)
@@ -41,12 +45,12 @@ export const CalendarDayView: React.FC<CalendarDayViewProps> = ({
   const getIcon = (tagId: string) => {
     const tag = tags.find(t => t.id === tagId);
     const name = tag?.name.toLowerCase() || '';
-    if (name.includes('design')) return <Zap size={compact ? 16 : 20} />;
-    if (name.includes('dev')) return <Calculator size={compact ? 16 : 20} />;
-    if (name.includes('personal')) return <Moon size={compact ? 16 : 20} />;
-    if (name.includes('meeting')) return <Clock size={compact ? 16 : 20} />;
-    if (name.includes('homework') || name.includes('project')) return <Book size={compact ? 16 : 20} />;
-    return <CalendarIcon size={compact ? 16 : 20} />;
+    if (name.includes('design')) return <Zap size={compact ? 16 : dense ? 14 : 20} />;
+    if (name.includes('dev')) return <Calculator size={compact ? 16 : dense ? 14 : 20} />;
+    if (name.includes('personal')) return <Moon size={compact ? 16 : dense ? 14 : 20} />;
+    if (name.includes('meeting')) return <Clock size={compact ? 16 : dense ? 14 : 20} />;
+    if (name.includes('homework') || name.includes('project')) return <Book size={compact ? 16 : dense ? 14 : 20} />;
+    return <CalendarIcon size={compact ? 16 : dense ? 14 : 20} />;
   };
 
   const items: any[] = [];
@@ -66,9 +70,13 @@ export const CalendarDayView: React.FC<CalendarDayViewProps> = ({
   }
 
   return (
-    <div className={`h-full flex flex-col ${compact ? '' : 'bg-[#f8f8f8] rounded-[40px] overflow-hidden'}`}>
-      <div className={`flex-1 overflow-y-auto no-scrollbar ${compact ? 'p-2' : 'p-12'}`}>
-        <div className={`${compact ? 'w-full' : 'max-w-2xl mx-auto'} relative`}>
+    <div className={`h-full min-h-0 flex flex-col ${compact ? '' : 'bg-[#f8f8f8] rounded-2xl sm:rounded-[40px] overflow-hidden'}`}>
+      <div
+        className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden [scrollbar-width:thin] ${
+          compact ? 'p-2' : dense ? 'p-3' : 'p-4 sm:p-8 lg:p-12'
+        }`}
+      >
+        <div className={`${compact || dense ? 'w-full' : 'max-w-2xl mx-auto'} relative min-w-0`}>
           {dayEvents.length === 0 ? (
             <div className={`${compact ? 'py-12' : 'py-32'} flex flex-col items-center justify-center text-center text-black/10`}>
               <div className={`${compact ? 'w-12 h-12' : 'w-24 h-24'} rounded-full border-2 border-dashed border-black/5 flex items-center justify-center mb-4`}>
@@ -81,16 +89,35 @@ export const CalendarDayView: React.FC<CalendarDayViewProps> = ({
               {items.map((item, idx) => {
                 if (item.type === 'gap') {
                   return (
-                    <div key={`gap-${idx}`} className={`flex ${compact ? 'gap-4 py-4' : 'gap-8 py-8'} items-center`}>
-                      <div className={`${compact ? 'w-10' : 'w-16'} text-right shrink-0`}>
-                        <span className={`${compact ? 'text-[10px]' : 'text-[13px]'} font-bold text-black/10`}>{formatTime(item.start)}</span>
+                    <div
+                      key={`gap-${idx}`}
+                      className={`flex flex-col sm:flex-row sm:items-center min-w-0 ${
+                        compact
+                          ? 'gap-2 sm:gap-4 py-3 sm:py-4'
+                          : dense
+                            ? 'gap-2 py-2'
+                            : 'gap-3 sm:gap-8 py-4 sm:py-8'
+                      }`}
+                    >
+                      <div className={`${compact ? 'w-full sm:w-10' : dense ? 'w-12 shrink-0 text-right' : 'w-full sm:w-16'} sm:text-right shrink-0`}>
+                        <span
+                          className={`font-bold text-black/10 tabular-nums ${
+                            compact ? 'text-[10px]' : dense ? 'text-[11px]' : 'text-[13px]'
+                          }`}
+                        >
+                          {formatTime(item.start)}
+                        </span>
                       </div>
-                      <div className="relative flex flex-col items-center">
-                        <div className={`w-px ${compact ? 'h-6' : 'h-12'} border-l border-dashed border-black/10`} />
+                      <div className="relative hidden sm:flex flex-col items-center shrink-0">
+                        <div className={`w-px ${compact ? 'h-6' : dense ? 'h-4' : 'h-12'} border-l border-dashed border-black/10`} />
                       </div>
-                      <div className={`flex items-center gap-3 text-black/20 italic ${compact ? 'text-[10px]' : 'text-sm'}`}>
-                        <Zap size={compact ? 10 : 14} className="opacity-50" />
-                        {item.message}
+                      <div
+                        className={`flex items-center gap-2 sm:gap-3 text-black/20 italic min-w-0 ${
+                          compact ? 'text-[10px]' : dense ? 'text-[11px]' : 'text-xs sm:text-sm'
+                        }`}
+                      >
+                        <Zap size={compact ? 10 : dense ? 10 : 14} className="opacity-50 shrink-0" />
+                        <span className="break-words">{item.message}</span>
                       </div>
                     </div>
                   );
@@ -101,27 +128,90 @@ export const CalendarDayView: React.FC<CalendarDayViewProps> = ({
                 const durationHours = durationMinutes / 60;
                 const isLarge = durationHours >= 1.5;
 
-                return (
-                  <div key={item.id} className={`flex ${compact ? 'gap-4 py-2' : 'gap-8 py-4'} items-center group`}>
-                    <div className={`${compact ? 'w-10' : 'w-16'} text-right shrink-0`}>
-                      <span className={`${compact ? 'text-[10px]' : 'text-[13px]'} font-bold text-black/60`}>{formatTime(item.startTime)}</span>
-                    </div>
-
-                    <div className="relative flex flex-col items-center">
-                      <div className={`${compact ? (isLarge ? 'w-8 h-16 rounded-xl' : 'w-8 h-8 rounded-full') : (isLarge ? 'w-14 h-32 rounded-[24px]' : 'w-14 h-14 rounded-full')} flex items-center justify-center transition-all duration-300 ${tag?.color || 'bg-black/5'} ${tag?.textColor || 'text-black shadow-sm'}`}>
-                        {getIcon(item.tagId)}
+                if (dense) {
+                  return (
+                    <div key={item.id} className="flex flex-row items-start gap-2.5 py-2 min-w-0 group">
+                      <div className="relative flex shrink-0 flex-col items-center">
+                        <div
+                          className={`flex items-center justify-center transition-all duration-300 ${tag?.color || 'bg-black/5'} ${tag?.textColor || 'text-black shadow-sm'} ${
+                            isLarge ? 'w-9 h-14 rounded-lg' : 'w-8 h-8 rounded-full'
+                          }`}
+                        >
+                          {getIcon(item.tagId)}
+                        </div>
+                        {idx < items.length - 1 && (
+                          <div className="hidden sm:block w-px h-3 border-l border-dashed border-black/10 mt-2" />
+                        )}
                       </div>
-                      {idx < items.length - 1 && (
-                        <div className={`w-px ${compact ? 'h-4' : 'h-8'} border-l border-dashed border-black/10 mt-2`} />
-                      )}
-                    </div>
-
-                    <div className="flex-1 flex items-center justify-between">
-                      <div>
-                        <span className={`${compact ? 'text-[9px]' : 'text-[11px]'} font-bold text-black/20 block mb-1`}>
+                      <div className="flex-1 min-w-0 pt-0.5">
+                        <h3 className="font-semibold text-[13px] leading-snug text-black/85 break-words">
+                          {item.title}
+                        </h3>
+                        <span className="font-bold text-black/40 tabular-nums text-[11px] mt-0.5 block">
                           {formatTime(item.startTime)} – {formatTime(item.endTime)}
                         </span>
-                        <h3 className={`${compact ? 'text-sm' : 'text-xl'} font-bold text-black/80`}>{item.title}</h3>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`flex flex-col sm:flex-row sm:items-center group min-w-0 ${
+                      compact ? 'gap-3 py-2' : 'gap-4 sm:gap-8 py-3 sm:py-4'
+                    }`}
+                  >
+                    <div
+                      className={`flex flex-row sm:flex-col items-center gap-2 sm:gap-0 shrink-0 ${
+                        compact ? 'w-full sm:w-10' : 'w-full sm:w-16'
+                      }`}
+                    >
+                      <div className={`${compact ? 'w-10 text-left sm:text-right' : 'w-full sm:w-16 sm:text-right'}`}>
+                        <span
+                          className={`font-bold text-black/60 tabular-nums ${
+                            compact ? 'text-[10px]' : 'text-[13px]'
+                          }`}
+                        >
+                          {formatTime(item.startTime)}
+                        </span>
+                      </div>
+                      <div className="relative flex flex-col items-center shrink-0">
+                        <div
+                          className={`flex items-center justify-center transition-all duration-300 ${tag?.color || 'bg-black/5'} ${tag?.textColor || 'text-black shadow-sm'} ${
+                            compact
+                              ? isLarge
+                                ? 'w-8 h-16 rounded-xl'
+                                : 'w-8 h-8 rounded-full'
+                              : isLarge
+                                ? 'w-12 h-24 sm:w-14 sm:h-32 rounded-[24px]'
+                                : 'w-11 h-11 sm:w-14 sm:h-14 rounded-full'
+                          }`}
+                        >
+                          {getIcon(item.tagId)}
+                        </div>
+                        {idx < items.length - 1 && (
+                          <div className={`hidden sm:block w-px ${compact ? 'h-4' : 'h-8'} border-l border-dashed border-black/10 mt-2`} />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex-1 min-w-0 flex items-center justify-between pl-0 sm:pl-0">
+                      <div className="min-w-0 w-full">
+                        <span
+                          className={`font-bold text-black/25 block mb-0.5 tabular-nums ${
+                            compact ? 'text-[9px]' : 'text-[11px]'
+                          }`}
+                        >
+                          {formatTime(item.startTime)} – {formatTime(item.endTime)}
+                        </span>
+                        <h3
+                          className={`font-semibold text-black/85 break-words ${
+                            compact ? 'text-sm' : 'text-base sm:text-xl'
+                          }`}
+                        >
+                          {item.title}
+                        </h3>
                       </div>
                     </div>
                   </div>
@@ -133,10 +223,11 @@ export const CalendarDayView: React.FC<CalendarDayViewProps> = ({
       </div>
       {onAddEventClick && !compact && (
         <button 
+          type="button"
           onClick={onAddEventClick}
-          className="absolute bottom-10 right-10 w-16 h-16 bg-black text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-300 z-50"
+          className="absolute bottom-4 right-4 z-50 hidden h-14 w-14 items-center justify-center rounded-full bg-black text-white shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 md:bottom-10 md:right-10 md:flex md:h-16 md:w-16"
         >
-          <Plus size={32} />
+          <Plus size={28} />
         </button>
       )}
     </div>
