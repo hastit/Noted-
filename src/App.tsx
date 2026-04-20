@@ -354,7 +354,7 @@ function AuthenticatedApp() {
       {activeTab === 'dashboard' && (
         <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[430px] md:h-[520px]">
           <div className="absolute inset-0" style={{background: theme.gradient}} />
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/15 to-white" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/[0.04] to-white" />
         </div>
       )}
 

@@ -379,8 +379,8 @@ export default function Dashboard({ events, tags, notebooks, notes = [], quickNo
               <div className="rounded-2xl border border-black/[0.06] shadow-sm overflow-hidden relative min-h-[140px] sm:min-h-[160px]"
                 style={{ background: theme.gradient }}>
                 <div className="pointer-events-none absolute inset-0">
-                  <div className="absolute top-[-32%] right-[-8%] w-56 h-56 rounded-full blur-3xl opacity-20" style={{background: theme.orbA}} />
-                  <div className="absolute bottom-[-40%] left-[8%] w-44 h-44 rounded-full blur-3xl opacity-15" style={{background: theme.orbB}} />
+                  <div className="absolute top-[-32%] right-[-8%] w-64 h-64 rounded-full blur-3xl" style={{background: theme.orbA}} />
+                  <div className="absolute bottom-[-40%] left-[8%] w-52 h-52 rounded-full blur-3xl" style={{background: theme.orbB}} />
                 </div>
                 <div className="absolute top-3 right-3 opacity-10">
                   <Sparkles size={48} className="text-white" />
