@@ -8,6 +8,7 @@ interface CalendarDayViewProps {
   events: CalendarEvent[];
   tags: Tag[];
   currentDate: Date;
+  onEventClick?: (event: CalendarEvent) => void;
   onAddEventClick?: () => void;
   compact?: boolean;
   /** Timeline jour plein écran, compact (mobile calendrier) */
@@ -25,6 +26,7 @@ export const CalendarDayView: React.FC<CalendarDayViewProps> = ({
   events, 
   tags, 
   currentDate, 
+  onEventClick,
   onAddEventClick,
   compact = false,
   denseMobile = false,
@@ -96,10 +98,15 @@ export const CalendarDayView: React.FC<CalendarDayViewProps> = ({
                           ? 'gap-2 sm:gap-4 py-3 sm:py-4'
                           : dense
                             ? 'gap-2 py-2'
-                            : 'gap-3 sm:gap-8 py-4 sm:py-8'
+                            : 'gap-3 sm:gap-8 py-3 sm:py-5'
                       }`}
                     >
-                      <div className={`${compact ? 'w-full sm:w-10' : dense ? 'w-12 shrink-0 text-right' : 'w-full sm:w-16'} sm:text-right shrink-0`}>
+                      <div
+                        className={`flex flex-row sm:flex-col items-center gap-2 sm:gap-1 shrink-0 ${
+                          compact ? 'w-full sm:w-10' : dense ? 'w-12 text-right' : 'w-full sm:w-16'
+                        }`}
+                      >
+                        <div className={`${compact ? 'w-10 text-left sm:text-right' : 'w-full sm:w-16 sm:text-right'}`}>
                         <span
                           className={`font-bold text-black/10 tabular-nums ${
                             compact ? 'text-[10px]' : dense ? 'text-[11px]' : 'text-[13px]'
@@ -107,9 +114,12 @@ export const CalendarDayView: React.FC<CalendarDayViewProps> = ({
                         >
                           {formatTime(item.start)}
                         </span>
-                      </div>
-                      <div className="relative hidden sm:flex flex-col items-center shrink-0">
-                        <div className={`w-px ${compact ? 'h-6' : dense ? 'h-4' : 'h-12'} border-l border-dashed border-black/10`} />
+                        </div>
+                        {!dense && (
+                          <div className="relative hidden sm:flex h-8 items-center justify-center shrink-0">
+                            <div className={`w-px ${compact ? 'h-4' : 'h-6'} border-l border-dashed border-black/10`} />
+                          </div>
+                        )}
                       </div>
                       <div
                         className={`flex items-center gap-2 sm:gap-3 text-black/20 italic min-w-0 ${
@@ -130,7 +140,20 @@ export const CalendarDayView: React.FC<CalendarDayViewProps> = ({
 
                 if (dense) {
                   return (
-                    <div key={item.id} className="flex flex-row items-start gap-2.5 py-2 min-w-0 group">
+                    <div
+                      key={item.id}
+                      role={onEventClick ? 'button' : undefined}
+                      tabIndex={onEventClick ? 0 : undefined}
+                      onClick={() => onEventClick?.(item)}
+                      onKeyDown={e => {
+                        if (!onEventClick) return;
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onEventClick(item);
+                        }
+                      }}
+                      className={`flex flex-row items-start gap-2.5 py-2 min-w-0 group ${onEventClick ? 'cursor-pointer' : ''}`}
+                    >
                       <div className="relative flex shrink-0 flex-col items-center">
                         <div
                           className={`flex items-center justify-center transition-all duration-300 ${tag?.color || 'bg-black/5'} ${tag?.textColor || 'text-black shadow-sm'} ${
@@ -158,9 +181,19 @@ export const CalendarDayView: React.FC<CalendarDayViewProps> = ({
                 return (
                   <div
                     key={item.id}
+                    role={onEventClick ? 'button' : undefined}
+                    tabIndex={onEventClick ? 0 : undefined}
+                    onClick={() => onEventClick?.(item)}
+                    onKeyDown={e => {
+                      if (!onEventClick) return;
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onEventClick(item);
+                      }
+                    }}
                     className={`flex flex-col sm:flex-row sm:items-center group min-w-0 ${
                       compact ? 'gap-3 py-2' : 'gap-4 sm:gap-8 py-3 sm:py-4'
-                    }`}
+                    } ${onEventClick ? 'cursor-pointer hover:bg-black/[0.015] rounded-xl' : ''}`}
                   >
                     <div
                       className={`flex flex-row sm:flex-col items-center gap-2 sm:gap-0 shrink-0 ${
@@ -184,8 +217,8 @@ export const CalendarDayView: React.FC<CalendarDayViewProps> = ({
                                 ? 'w-8 h-16 rounded-xl'
                                 : 'w-8 h-8 rounded-full'
                               : isLarge
-                                ? 'w-12 h-24 sm:w-14 sm:h-32 rounded-[24px]'
-                                : 'w-11 h-11 sm:w-14 sm:h-14 rounded-full'
+                                ? 'w-10 h-16 sm:w-11 sm:h-20 rounded-[20px]'
+                                : 'w-10 h-10 sm:w-12 sm:h-12 rounded-full'
                           }`}
                         >
                           {getIcon(item.tagId)}
@@ -200,14 +233,14 @@ export const CalendarDayView: React.FC<CalendarDayViewProps> = ({
                       <div className="min-w-0 w-full">
                         <span
                           className={`font-bold text-black/25 block mb-0.5 tabular-nums ${
-                            compact ? 'text-[9px]' : 'text-[11px]'
+                            compact ? 'text-[9px]' : 'text-[10px]'
                           }`}
                         >
                           {formatTime(item.startTime)} – {formatTime(item.endTime)}
                         </span>
                         <h3
                           className={`font-semibold text-black/85 break-words ${
-                            compact ? 'text-sm' : 'text-base sm:text-xl'
+                            compact ? 'text-sm' : 'text-base sm:text-lg'
                           }`}
                         >
                           {item.title}

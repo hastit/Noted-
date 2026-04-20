@@ -32,11 +32,13 @@ function MobileWeekThreeDayView({
   events,
   tags,
   centerDate,
+  onEventClick,
   onSelectSlot,
 }: {
   events: CalendarEvent[];
   tags: Tag[];
   centerDate: Date;
+  onEventClick: (event: CalendarEvent) => void;
   onSelectSlot: (date: string, hour: number) => void;
 }) {
   const {language} = useLanguage();
@@ -154,6 +156,15 @@ function MobileWeekThreeDayView({
                     return (
                       <div
                         key={event.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onEventClick(event)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            onEventClick(event);
+                          }
+                        }}
                         className="absolute left-0.5 right-0.5 z-10 flex flex-row items-start gap-1.5 overflow-hidden rounded-md border border-black/[0.06] bg-white/95 px-1 py-0.5 shadow-sm"
                         style={{top: `${top}px`, height: `${height}px`}}
                       >
@@ -183,6 +194,8 @@ function MobileWeekThreeDayView({
 
 export type RemoteEventsBridge = {
   create: (ev: Omit<CalendarEvent, 'id'>) => Promise<CalendarEvent>;
+  update: (id: string, ev: Partial<CalendarEvent>) => Promise<void>;
+  delete: (id: string) => Promise<void>;
 };
 
 interface CalendarProps {
@@ -201,6 +214,7 @@ export default function Calendar({ events, tags, onEventsChange, onTagsChange, r
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAdvancedModal, setIsAdvancedModal] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<{ date: string; time: number } | null>(null);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [mobileDaySheet, setMobileDaySheet] = useState<string | null>(null);
 
   const monthYearLabel = currentDate.toLocaleString(language === '日本語' ? 'ja-JP' : 'default', { month: 'long', year: 'numeric' });
@@ -218,8 +232,19 @@ export default function Calendar({ events, tags, onEventsChange, onTagsChange, r
     setCurrentDate(newDate);
   };
 
-  const handleAddEvent = async (eventData: Omit<CalendarEvent, 'id'>) => {
-    if (remoteEvents) {
+  const handleSaveEvent = async (eventData: Omit<CalendarEvent, 'id'>) => {
+    if (editingEvent) {
+      const updatedEvent: CalendarEvent = {...editingEvent, ...eventData};
+      if (remoteEvents) {
+        try {
+          await remoteEvents.update(editingEvent.id, eventData);
+        } catch (e) {
+          console.error(e);
+          return;
+        }
+      }
+      onEventsChange(events.map(ev => (ev.id === editingEvent.id ? updatedEvent : ev)));
+    } else if (remoteEvents) {
       try {
         const ev = await remoteEvents.create(eventData);
         onEventsChange([...events, ev]);
@@ -236,6 +261,24 @@ export default function Calendar({ events, tags, onEventsChange, onTagsChange, r
     setIsModalOpen(false);
     setIsAdvancedModal(false);
     setSelectedSlot(null);
+    setEditingEvent(null);
+  };
+
+  const handleDeleteEvent = async () => {
+    if (!editingEvent) return;
+    if (remoteEvents) {
+      try {
+        await remoteEvents.delete(editingEvent.id);
+      } catch (e) {
+        console.error(e);
+        return;
+      }
+    }
+    onEventsChange(events.filter(ev => ev.id !== editingEvent.id));
+    setIsModalOpen(false);
+    setIsAdvancedModal(false);
+    setSelectedSlot(null);
+    setEditingEvent(null);
   };
 
   const handleAddTag = (name: string, colorIndex: number) => {
@@ -337,10 +380,17 @@ export default function Calendar({ events, tags, onEventsChange, onTagsChange, r
                 events={events} 
                 tags={tags} 
                 currentDate={currentDate}
+                onEventClick={event => {
+                  setEditingEvent(event);
+                  setSelectedSlot({date: event.date, time: event.startTime});
+                  setIsAdvancedModal(false);
+                  setIsModalOpen(true);
+                }}
                 compactCells={isMobile}
                 eventDotsOnly={isMobile}
                 onDaySheetOpen={isMobile ? (date) => setMobileDaySheet(date) : undefined}
                 onSelectSlot={(date) => {
+                  setEditingEvent(null);
                   setSelectedSlot({ date, time: 540 }); // Default to 9 AM (9 * 60)
                   setIsModalOpen(true);
                 }}
@@ -354,7 +404,14 @@ export default function Calendar({ events, tags, onEventsChange, onTagsChange, r
                   events={events}
                   tags={tags}
                   centerDate={currentDate}
+                  onEventClick={event => {
+                    setEditingEvent(event);
+                    setSelectedSlot({date: event.date, time: event.startTime});
+                    setIsAdvancedModal(false);
+                    setIsModalOpen(true);
+                  }}
                   onSelectSlot={(date, hour) => {
+                    setEditingEvent(null);
                     setSelectedSlot({date, time: hour * 60});
                     setIsModalOpen(true);
                   }}
@@ -364,7 +421,14 @@ export default function Calendar({ events, tags, onEventsChange, onTagsChange, r
                   events={events} 
                   tags={tags} 
                   currentDate={currentDate}
+                  onEventClick={event => {
+                    setEditingEvent(event);
+                    setSelectedSlot({date: event.date, time: event.startTime});
+                    setIsAdvancedModal(false);
+                    setIsModalOpen(true);
+                  }}
                   onSelectSlot={(date, hour) => {
+                    setEditingEvent(null);
                     setSelectedSlot({ date, time: hour * 60 });
                     setIsModalOpen(true);
                   }}
@@ -379,10 +443,17 @@ export default function Calendar({ events, tags, onEventsChange, onTagsChange, r
                 tags={tags} 
                 currentDate={currentDate}
                 denseMobile={isMobile}
+                onEventClick={event => {
+                  setEditingEvent(event);
+                  setSelectedSlot({date: event.date, time: event.startTime});
+                  setIsAdvancedModal(false);
+                  setIsModalOpen(true);
+                }}
                 onAddEventClick={
                   isMobile
                     ? undefined
                     : () => {
+                        setEditingEvent(null);
                         setIsAdvancedModal(true);
                         setIsModalOpen(true);
                       }
@@ -453,7 +524,26 @@ export default function Calendar({ events, tags, onEventsChange, onTagsChange, r
                       return (
                         <div
                           key={event.id}
-                          className={`rounded-2xl px-4 py-3 text-sm font-semibold ${tag?.color || 'bg-black/5'} ${tag?.textColor || 'text-black'}`}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => {
+                            setEditingEvent(event);
+                            setSelectedSlot({date: event.date, time: event.startTime});
+                            setMobileDaySheet(null);
+                            setIsAdvancedModal(false);
+                            setIsModalOpen(true);
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setEditingEvent(event);
+                              setSelectedSlot({date: event.date, time: event.startTime});
+                              setMobileDaySheet(null);
+                              setIsAdvancedModal(false);
+                              setIsModalOpen(true);
+                            }
+                          }}
+                          className={`rounded-2xl px-4 py-3 text-sm font-semibold cursor-pointer ${tag?.color || 'bg-black/5'} ${tag?.textColor || 'text-black'}`}
                         >
                           {event.title}
                         </div>
@@ -465,6 +555,7 @@ export default function Calendar({ events, tags, onEventsChange, onTagsChange, r
                 <button
                   type="button"
                   onClick={() => {
+                    setEditingEvent(null);
                     setSelectedSlot({date: mobileDaySheet, time: 540});
                     setMobileDaySheet(null);
                     setIsModalOpen(true);
@@ -487,13 +578,16 @@ export default function Calendar({ events, tags, onEventsChange, onTagsChange, r
               setIsModalOpen(false);
               setIsAdvancedModal(false);
               setSelectedSlot(null);
+              setEditingEvent(null);
             }}
-            onSubmit={handleAddEvent}
+            onSubmit={handleSaveEvent}
+            onDeleteEvent={editingEvent ? () => void handleDeleteEvent() : undefined}
             tags={tags}
             onAddTag={handleAddTag}
             initialDate={selectedSlot?.date}
             initialTime={selectedSlot?.time}
             isAdvanced={isAdvancedModal}
+            existingEvent={editingEvent}
           />
         )}
       </AnimatePresence>
@@ -505,6 +599,7 @@ interface MonthViewProps {
   events: CalendarEvent[];
   tags: Tag[];
   currentDate: Date;
+  onEventClick: (event: CalendarEvent) => void;
   onSelectSlot: (date: string) => void;
   /** Grille plus compacte (téléphone) */
   compactCells?: boolean;
@@ -518,6 +613,7 @@ const MonthView: React.FC<MonthViewProps> = ({
   events,
   tags,
   currentDate,
+  onEventClick,
   onSelectSlot,
   compactCells,
   eventDotsOnly,
@@ -699,6 +795,19 @@ const MonthView: React.FC<MonthViewProps> = ({
                             return (
                               <div
                                 key={event.id}
+                                role="button"
+                                tabIndex={0}
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  onEventClick(event);
+                                }}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    onEventClick(event);
+                                  }
+                                }}
                                 className={`px-1.5 sm:px-2 lg:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl font-bold shadow-sm max-w-full break-words line-clamp-2 sm:line-clamp-3 ${tag?.color || 'bg-black/5'} ${tag?.textColor || 'text-black'} ${
                                   compactCells ? 'text-xs' : 'text-[8px] sm:text-[9px] lg:text-[10px]'
                                 }`}
@@ -739,6 +848,7 @@ interface WeekViewProps {
   events: CalendarEvent[];
   tags: Tag[];
   currentDate: Date;
+  onEventClick: (event: CalendarEvent) => void;
   onSelectSlot: (date: string, hour: number) => void;
 }
 
@@ -746,6 +856,7 @@ const WeekView: React.FC<WeekViewProps> = ({
   events, 
   tags, 
   currentDate,
+  onEventClick,
   onSelectSlot 
 }) => {
   const { language } = useLanguage();
@@ -858,6 +969,15 @@ const WeekView: React.FC<WeekViewProps> = ({
                       return (
                         <div 
                           key={event.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => onEventClick(event)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              onEventClick(event);
+                            }
+                          }}
                           className={`absolute left-0.5 right-0.5 sm:left-1 sm:right-1 lg:left-2 lg:right-2 rounded-xl lg:rounded-[28px] p-2 sm:p-3 lg:p-5 shadow-sm flex flex-col overflow-hidden group hover:scale-[1.01] transition-all duration-300 cursor-pointer z-10 min-h-0 ${tag?.color || 'bg-black/10'} ${tag?.textColor || 'text-black'}`}
                           style={{ top: `${top}px`, height: `${height}px` }}
                         >
@@ -890,27 +1010,31 @@ const WeekView: React.FC<WeekViewProps> = ({
 function AddEventModal({ 
   onClose, 
   onSubmit, 
+  onDeleteEvent,
   tags, 
   onAddTag,
   initialDate,
   initialTime,
-  isAdvanced = false
+  isAdvanced = false,
+  existingEvent,
 }: { 
   onClose: () => void; 
   onSubmit: (data: Omit<CalendarEvent, 'id'>) => void | Promise<void>;
+  onDeleteEvent?: () => void;
   tags: Tag[];
   onAddTag: (name: string, colorIndex: number) => Tag;
   initialDate?: string;
   initialTime?: number;
   isAdvanced?: boolean;
+  existingEvent?: CalendarEvent | null;
 }) {
   const { t, language } = useLanguage();
-  const [title, setTitle] = useState('');
-  const [date, setDate] = useState(initialDate || formatDate(new Date()));
-  const [startTime, setStartTime] = useState(initialTime || 540); // Default 9 AM
-  const [duration, setDuration] = useState(60); // Default 1 hour
-  const [selectedTagId, setSelectedTagId] = useState(tags[0]?.id || '');
-  const [location, setLocation] = useState('');
+  const [title, setTitle] = useState(existingEvent?.title || '');
+  const [date, setDate] = useState(existingEvent?.date || initialDate || formatDate(new Date()));
+  const [startTime, setStartTime] = useState(existingEvent?.startTime || initialTime || 540); // Default 9 AM
+  const [duration, setDuration] = useState(existingEvent ? Math.max(existingEvent.endTime - existingEvent.startTime, 15) : 60); // Default 1 hour
+  const [selectedTagId, setSelectedTagId] = useState(existingEvent?.tagId || tags[0]?.id || '');
+  const [location, setLocation] = useState(existingEvent?.location || '');
   
   const [isCreatingTag, setIsCreatingTag] = useState(false);
   const [newTagName, setNewTagName] = useState('');
@@ -1223,14 +1347,23 @@ function AddEventModal({
               )}
             </div>
 
-            {/* Action Button */}
-            <div className="pt-4">
+            {/* Action Buttons */}
+            <div className="pt-4 flex items-center gap-3">
+              {onDeleteEvent && (
+                <button
+                  type="button"
+                  onClick={onDeleteEvent}
+                  className="min-h-14 rounded-[28px] px-6 bg-red-50 text-red-600 font-bold text-sm hover:bg-red-100 transition-colors"
+                >
+                  Delete
+                </button>
+              )}
               <button 
                 type="button"
                 onClick={() => void handleSubmit()}
-                className="w-full py-5 bg-black text-white rounded-[32px] font-bold text-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-xl shadow-black/10"
+                className="flex-1 py-5 bg-black text-white rounded-[32px] font-bold text-lg hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-xl shadow-black/10"
               >
-                {t('save_label')}
+                {existingEvent ? t('save_label') : t('create_event')}
               </button>
             </div>
           </div>
@@ -1254,7 +1387,7 @@ function AddEventModal({
         onClick={e => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-8">
-          <h2 className="text-2xl font-display font-bold">{t('add_event')}</h2>
+              <h2 className="text-2xl font-display font-bold">{existingEvent ? 'Edit Event' : t('add_event')}</h2>
           <button onClick={onClose} className="w-10 h-10 rounded-full bg-black/5 flex items-center justify-center hover:bg-black/10 transition-colors">
             <X size={20} />
           </button>
@@ -1310,6 +1443,17 @@ function AddEventModal({
                 </button>
               ))}
             </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold text-black/30 uppercase tracking-widest mb-2 block">{t('location')}</label>
+            <input
+              type="text"
+              placeholder={t('location')}
+              value={location}
+              onChange={e => setLocation(e.target.value)}
+              className="w-full bg-black/5 rounded-2xl px-6 py-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-black/5 transition-all"
+            />
           </div>
 
           <div>
@@ -1375,12 +1519,23 @@ function AddEventModal({
             )}
           </div>
 
-          <button 
-            type="submit"
-            className="w-full py-4 bg-black text-white rounded-2xl font-bold text-base hover:bg-black/90 active:scale-95 transition-all shadow-lg"
-          >
-            {t('create_event')}
-          </button>
+          <div className="flex items-center gap-3">
+            {onDeleteEvent && (
+              <button
+                type="button"
+                onClick={onDeleteEvent}
+                className="min-h-12 rounded-2xl px-5 bg-red-50 text-red-600 font-bold text-sm hover:bg-red-100 transition-colors"
+              >
+                Delete
+              </button>
+            )}
+            <button 
+              type="submit"
+              className="flex-1 py-4 bg-black text-white rounded-2xl font-bold text-base hover:bg-black/90 active:scale-95 transition-all shadow-lg"
+            >
+              {existingEvent ? t('save_label') : t('create_event')}
+            </button>
+          </div>
         </form>
       </motion.div>
     </motion.div>

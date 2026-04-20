@@ -23,6 +23,7 @@ import ResetPasswordScreen from './components/ResetPasswordScreen';
 import MobileBottomNav from './components/MobileBottomNav';
 import {LanguageProvider, useLanguage} from './context/LanguageContext';
 import {AuthProvider, useAuth} from './context/AuthContext';
+import {PomodoroProvider, usePomodoro} from './context/PomodoroContext';
 import * as notesService from './lib/notes';
 import * as tasksService from './lib/tasks';
 import * as calendarService from './lib/calendar';
@@ -30,12 +31,14 @@ import * as notebooksService from './lib/notebooks';
 import * as foldersService from './lib/folders';
 import * as quickNotesService from './lib/quickNotes';
 import {isRecoveryImplicitHash} from './lib/authRecoveryHash';
+import {DashboardThemeId, DEFAULT_DASHBOARD_THEME, getDashboardTheme} from './lib/dashboardThemes';
 
 const Landing = lazy(() => import('./pages/Landing'));
 
 const LS_NOTEBOOKS = 'noted-notebooks-v1';
 const LS_FOLDERS = 'noted-folders-v1';
 const LS_QUICK = 'noted-quick-notes-v1';
+const LS_DASHBOARD_THEME = 'noted-dashboard-theme-v1';
 
 function loadLS<T>(key: string, fallback: T): T {
   try {
@@ -48,6 +51,13 @@ function loadLS<T>(key: string, fallback: T): T {
 
 function saveLS<T>(key: string, value: T) {
   localStorage.setItem(key, JSON.stringify(value));
+}
+
+function localDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 function mergeNotebooksForNotes(notebooks: Notebook[], notes: Note[]): Notebook[] {
@@ -122,7 +132,9 @@ function AppShell() {
   if (!session) return <Navigate to="/login" replace />;
   return (
     <LanguageProvider>
-      <AuthenticatedApp />
+      <PomodoroProvider>
+        <AuthenticatedApp />
+      </PomodoroProvider>
     </LanguageProvider>
   );
 }
@@ -131,6 +143,7 @@ function AuthenticatedApp() {
   const {t} = useLanguage();
   const {user} = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [notesImmersive, setNotesImmersive] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [tags, setTags] = useState<Tag[]>(DEFAULT_TAGS);
@@ -140,6 +153,10 @@ function AuthenticatedApp() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [quickNotes, setQuickNotesState] = useState<QuickNote[]>([]);
   const [selectedNotebookId, setSelectedNotebookId] = useState<string | null>(null);
+  const [dashboardTheme, setDashboardTheme] = useState<DashboardThemeId>(() =>
+    loadLS<DashboardThemeId>(LS_DASHBOARD_THEME, DEFAULT_DASHBOARD_THEME),
+  );
+  const dayKeyRef = useRef(localDateKey(new Date()));
 
   const notePersistTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -266,13 +283,50 @@ function AuthenticatedApp() {
       create: (partial: Omit<Task, 'id' | 'status'>, status: Task['status']) =>
         tasksService.createTask({...partial, status} as Omit<Task, 'id'>),
       update: (task: Task) => tasksService.updateTask(task.id, task),
+      delete: (id: string) => tasksService.deleteTask(id),
     }),
     [],
   );
 
+  const handleCompleteTaskFromDashboard = useCallback(
+    (task: Task) => {
+      if (task.status === 'done') return;
+      const nowIso = new Date().toISOString();
+      const updated: Task = {
+        ...task,
+        status: 'done',
+        startedAt: task.startedAt ?? nowIso,
+        finishedAt: nowIso,
+      };
+      setTasks(prev => prev.map(t => (t.id === updated.id ? updated : t)));
+      void remoteTasks.update(updated).catch(console.error);
+    },
+    [remoteTasks],
+  );
+
+  useEffect(() => {
+    const pruneCompletedFromPreviousDays = () => {
+      const todayKey = localDateKey(new Date());
+      if (todayKey === dayKeyRef.current) return;
+      dayKeyRef.current = todayKey;
+      setTasks(prev => {
+        const toDelete = prev.filter(task => task.status === 'done' && task.dueDate < todayKey);
+        toDelete.forEach(task => {
+          void remoteTasks.delete(task.id).catch(console.error);
+        });
+        return prev.filter(task => !(task.status === 'done' && task.dueDate < todayKey));
+      });
+    };
+
+    const id = window.setInterval(pruneCompletedFromPreviousDays, 30_000);
+    return () => window.clearInterval(id);
+  }, [remoteTasks]);
+
   const remoteEvents = useMemo(
     () => ({
       create: (ev: Omit<CalendarEvent, 'id'>) => calendarService.createEvent(ev),
+      update: (id: string, ev: Partial<CalendarEvent>) => calendarService.updateEvent(id, ev),
+      delete: (id: string) => calendarService.deleteEvent(id),
     }),
     [],
   );
@@ -285,8 +339,25 @@ function AuthenticatedApp() {
     {id: 'settings', label: t('settings'), icon: SettingsIcon},
   ];
 
+  const theme = getDashboardTheme(dashboardTheme);
+
+  useEffect(() => {
+    saveLS(LS_DASHBOARD_THEME, dashboardTheme);
+  }, [dashboardTheme]);
+
+  useEffect(() => {
+    if (activeTab !== 'notes') setNotesImmersive(false);
+  }, [activeTab]);
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden relative min-h-0">
+      {activeTab === 'dashboard' && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[430px] md:h-[520px]">
+          <div className="absolute inset-0" style={{background: theme.gradient}} />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/15 to-white" />
+        </div>
+      )}
+
       {dataLoading && (
         <div className="absolute inset-0 z-[150] flex flex-col items-center justify-center bg-[#f8f9fa]/80 backdrop-blur-[2px] pointer-events-none">
           <motion.div
@@ -298,7 +369,7 @@ function AuthenticatedApp() {
         </div>
       )}
 
-      <header className="hidden md:grid h-16 sm:h-20 shrink-0 z-50 grid-cols-[minmax(0,auto)_minmax(0,1fr)_minmax(0,auto)] items-center gap-2 sm:gap-3 px-3 sm:px-5 lg:px-8 min-w-0 border-b border-black/[0.04]">
+      <header className={`${notesImmersive ? 'hidden' : 'hidden md:grid'} h-16 sm:h-20 shrink-0 z-50 grid-cols-[minmax(0,auto)_minmax(0,1fr)_minmax(0,auto)] items-center gap-2 sm:gap-3 px-3 sm:px-5 lg:px-8 min-w-0 border-b border-black/[0.04]`}>
         <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink-0 pr-1">
           <div className="w-8 h-8 shrink-0 rounded-lg bg-black flex items-center justify-center">
             <div className="w-4 h-4 rounded-sm bg-white rotate-45" />
@@ -353,7 +424,7 @@ function AuthenticatedApp() {
         </div>
       </header>
 
-      <header className="md:hidden flex h-12 max-h-12 shrink-0 z-50 items-center justify-between gap-2 px-3 min-w-0 border-b border-black/[0.04] bg-[#f8f9fa]/90 backdrop-blur-sm">
+      <header className={`${notesImmersive ? 'hidden' : 'md:hidden flex'} h-12 max-h-12 shrink-0 z-50 items-center justify-between gap-2 px-3 min-w-0 border-b border-black/[0.04] bg-[#f8f9fa]/90 backdrop-blur-sm`}>
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-7 h-7 shrink-0 rounded-md bg-black flex items-center justify-center">
             <div className="w-3 h-3 rounded-sm bg-white rotate-45" />
@@ -365,7 +436,13 @@ function AuthenticatedApp() {
         </div>
       </header>
 
-      <main className="flex-1 min-h-0 min-w-0 flex flex-col relative px-3 sm:px-5 lg:px-8 max-md:px-3 max-md:pt-2 md:pt-6 lg:pt-7 pb-4 sm:pb-6 lg:pb-8 max-md:pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] overflow-x-visible overflow-y-hidden">
+      <main
+        className={`flex-1 min-h-0 min-w-0 flex flex-col relative z-10 ${
+          notesImmersive
+            ? 'px-0 pt-0 pb-0 max-md:px-0 max-md:pt-0 max-md:pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))]'
+            : 'px-3 sm:px-5 lg:px-8 max-md:px-3 max-md:pt-2 md:pt-6 lg:pt-7 pb-4 sm:pb-6 lg:pb-8 max-md:pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))]'
+        } overflow-x-visible overflow-y-hidden`}
+      >
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -381,6 +458,10 @@ function AuthenticatedApp() {
                 tags={tags}
                 notebooks={mergedNotebooks}
                 notes={notes}
+                quickNotes={quickNotes}
+                tasks={tasks}
+                dashboardTheme={dashboardTheme}
+                onCompleteTask={handleCompleteTaskFromDashboard}
                 onNavigate={(tab, notebookId) => {
                   if (notebookId) setSelectedNotebookId(notebookId);
                   setActiveTab(tab);
@@ -405,6 +486,7 @@ function AuthenticatedApp() {
                 folders={folders}
                 notes={notes}
                 quickNotes={quickNotes}
+                onImmersiveModeChange={setNotesImmersive}
                 onNotebooksChange={setNotebooks}
                 onFoldersChange={setFolders}
                 onNotesChange={setNotes}
@@ -426,16 +508,85 @@ function AuthenticatedApp() {
                 remoteEvents={remoteEvents}
               />
             )}
-            {activeTab === 'settings' && <Settings />}
+            {activeTab === 'settings' && (
+              <Settings
+                dashboardTheme={dashboardTheme}
+                onDashboardThemeChange={setDashboardTheme}
+              />
+            )}
           </motion.div>
         </AnimatePresence>
       </main>
 
       <MobileBottomNav active={activeTab} onChange={setActiveTab} />
 
+      {/* Floating mini-timer — visible on all tabs except dashboard */}
+      {activeTab !== 'dashboard' && <FloatingTimer onNavigate={() => setActiveTab('dashboard')} />}
+
       <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-100/30 blur-[120px] rounded-full -z-10" />
       <div className="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-rose-100/30 blur-[120px] rounded-full -z-10" />
     </div>
+  );
+}
+
+function FloatingTimer({ onNavigate }: { onNavigate: () => void }) {
+  const { timeLeft, isRunning, mode, currentMode, setIsRunning } = usePomodoro();
+  const minutes = Math.floor(timeLeft / 60);
+  const seconds = timeLeft % 60;
+  const total = currentMode.duration;
+  const progress = 1 - timeLeft / total;
+  const radius = 16;
+  const circumference = 2 * Math.PI * radius;
+  const dash = circumference * (1 - progress);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16, scale: 0.92 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 16, scale: 0.92 }}
+      transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+      className="fixed bottom-[5.5rem] md:bottom-6 right-4 md:right-6 z-[130] flex items-center gap-2 bg-white rounded-2xl shadow-xl border border-black/[0.07] px-3 py-2 cursor-pointer hover:shadow-2xl transition-shadow select-none"
+      onClick={onNavigate}
+      title="Go to Focus Timer"
+    >
+      {/* Ring progress */}
+      <div className="relative w-9 h-9 shrink-0">
+        <svg viewBox="0 0 40 40" className="w-full h-full -rotate-90">
+          <circle cx="20" cy="20" r={radius} fill="none" stroke={`${currentMode.color}20`} strokeWidth="4" />
+          <circle
+            cx="20" cy="20" r={radius} fill="none"
+            stroke={currentMode.color} strokeWidth="4"
+            strokeDasharray={circumference}
+            strokeDashoffset={dash}
+            strokeLinecap="round"
+            style={{ transition: 'stroke-dashoffset 1s linear' }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-[8px] font-bold" style={{ color: currentMode.color }}>
+            {String(minutes).padStart(2,'0')}:{String(seconds).padStart(2,'0')}
+          </span>
+        </div>
+      </div>
+
+      {/* Label + mode */}
+      <div className="flex flex-col min-w-0">
+        <span className="text-[11px] font-bold text-black/70 leading-tight">{currentMode.label}</span>
+        <span className="text-[10px] text-black/35 leading-tight">{isRunning ? 'Running…' : 'Paused'}</span>
+      </div>
+
+      {/* Play/pause */}
+      <button
+        onClick={e => { e.stopPropagation(); setIsRunning(!isRunning); }}
+        className="w-7 h-7 rounded-xl flex items-center justify-center text-white shrink-0 transition-transform hover:scale-110 active:scale-95"
+        style={{ backgroundColor: currentMode.color }}
+      >
+        {isRunning
+          ? <svg width="10" height="10" viewBox="0 0 10 10"><rect x="1" y="1" width="3" height="8" rx="1" fill="white"/><rect x="6" y="1" width="3" height="8" rx="1" fill="white"/></svg>
+          : <svg width="10" height="10" viewBox="0 0 10 10"><polygon points="2,1 9,5 2,9" fill="white"/></svg>
+        }
+      </button>
+    </motion.div>
   );
 }
 

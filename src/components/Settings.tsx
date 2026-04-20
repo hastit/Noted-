@@ -4,8 +4,14 @@ import { User, Shield, Globe, LogOut, Camera, Mail, Lock, Check, Send } from 'lu
 import { useLanguage, Language } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { getDisplayName, initialsFromDisplayName } from '../lib/displayName';
+import { DASHBOARD_THEMES, DashboardThemeId, getDashboardTheme } from '../lib/dashboardThemes';
 
-export default function Settings() {
+type SettingsProps = {
+  dashboardTheme: DashboardThemeId;
+  onDashboardThemeChange: (theme: DashboardThemeId) => void;
+};
+
+export default function Settings({dashboardTheme, onDashboardThemeChange}: SettingsProps) {
   const { user, signOut, updateDisplayName } = useAuth();
   const { language: globalLanguage, timezone: globalTimezone, setLanguage: setGlobalLanguage, t } = useLanguage();
   const [activeSection, setActiveSection] = useState('profile');
@@ -20,6 +26,7 @@ export default function Settings() {
     { id: 'profile', label: t('profile'), icon: User },
     { id: 'security', label: t('security'), icon: Shield },
     { id: 'language', label: t('language'), icon: Globe },
+    { id: 'appearance', label: 'Appearance', icon: Camera },
   ];
 
   const [profile, setProfile] = useState({
@@ -306,6 +313,60 @@ export default function Settings() {
               >
                 {t('save')}
               </button>
+            </div>
+          </motion.div>
+        );
+      case 'appearance':
+        return (
+          <motion.div
+            key="appearance"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-6 max-md:space-y-6 sm:space-y-10"
+          >
+            <section className="space-y-4">
+              <h3 className="text-base max-md:text-base sm:text-lg font-display font-bold">Dashboard gradient</h3>
+              <p className="text-[12px] sm:text-sm text-black/45 leading-relaxed">
+                Choose the style used for your dashboard background and Daily Spark card.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                {DASHBOARD_THEMES.map(theme => {
+                  const selected = theme.id === dashboardTheme;
+                  return (
+                    <button
+                      key={theme.id}
+                      type="button"
+                      onClick={() => onDashboardThemeChange(theme.id)}
+                      className={`relative rounded-2xl border p-3 text-left transition-all ${
+                        selected
+                          ? 'border-black/20 ring-2 ring-black/10'
+                          : 'border-black/10 hover:border-black/20'
+                      }`}
+                    >
+                      <div
+                        className="h-20 w-full rounded-xl"
+                        style={{ background: theme.gradient }}
+                        aria-hidden
+                      />
+                      <div className="mt-2 flex items-center justify-between">
+                        <span className="text-sm font-semibold text-black/80">{theme.name}</span>
+                        {selected && (
+                          <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">Active</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <div className="p-4 sm:p-5 rounded-2xl border border-black/10 bg-black/[0.02]">
+              <p className="text-[11px] sm:text-xs text-black/45">
+                Current: <span className="font-semibold text-black/70">{getDashboardTheme(dashboardTheme).name}</span>
+              </p>
             </div>
           </motion.div>
         );

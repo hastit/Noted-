@@ -22,6 +22,7 @@ import MobileFab from './MobileFab';
 export type RemoteTasksBridge = {
   create: (partial: Omit<Task, 'id' | 'status'>, status: TaskStatus) => Promise<Task>;
   update: (task: Task) => Promise<void>;
+  delete: (id: string) => Promise<void>;
 };
 
 interface TasksProps {

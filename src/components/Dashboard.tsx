@@ -1,370 +1,479 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'motion/react';
-import { Book, Sparkles, Calendar as CalendarIcon, Zap, ArrowRight, PenLine, Type, Trash2 } from 'lucide-react';
-import { CalendarDayView } from './CalendarDayView';
+import {
+  Book, Calendar as CalendarIcon, ArrowRight, PenLine,
+  CheckSquare, Clock, Sparkles, ChevronRight, Circle, CheckCircle2, StickyNote,
+} from 'lucide-react';
 import PomodoroTimer from './PomodoroTimer';
-import { CalendarEvent, Notebook, Note, Tag } from '../types';
+import { CalendarDayView } from './CalendarDayView';
+import { CalendarEvent, Notebook, Note, QuickNote, Tag, Task } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { getDisplayName } from '../lib/displayName';
+import { DashboardThemeId, getDashboardTheme } from '../lib/dashboardThemes';
 
 interface DashboardProps {
   events: CalendarEvent[];
   tags: Tag[];
   notebooks: Notebook[];
-  /** Pour afficher les cartes carnets comme dans Notes (aperçu + nombre de pages) */
   notes?: Note[];
+  quickNotes?: QuickNote[];
+  tasks?: Task[];
+  dashboardTheme: DashboardThemeId;
+  onCompleteTask: (task: Task) => void;
   onNavigate: (tab: 'dashboard' | 'tasks' | 'notes' | 'calendar' | 'settings', notebookId?: string) => void;
 }
 
-export default function Dashboard({ events, tags, notebooks, notes = [], onNavigate }: DashboardProps) {
+const QUOTES = [
+  { text: "The secret of getting ahead is getting started.", author: "Mark Twain" },
+  { text: "Focus on being productive instead of busy.", author: "Tim Ferriss" },
+  { text: "It always seems impossible until it's done.", author: "Nelson Mandela" },
+  { text: "Small steps every day lead to big results.", author: "" },
+  { text: "Your future is created by what you do today.", author: "" },
+  { text: "Don't watch the clock; do what it does. Keep going.", author: "Sam Levenson" },
+  { text: "Learning never exhausts the mind.", author: "Leonardo da Vinci" },
+];
+
+function pad(n: number) { return String(n).padStart(2, '0'); }
+
+export default function Dashboard({ events, tags, notebooks, notes = [], quickNotes = [], tasks = [], dashboardTheme, onCompleteTask, onNavigate }: DashboardProps) {
   const { t, language } = useLanguage();
   const { user } = useAuth();
   const isMobile = useIsMobile();
   const displayName = getDisplayName(user);
-  const [greeting, setGreeting] = useState('');
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [agendaExpanded, setAgendaExpanded] = useState(false);
+  const [now, setNow] = useState(new Date());
 
   useEffect(() => {
-    const hour = new Date().getHours();
-    if (hour < 12) setGreeting(t('good_morning'));
-    else if (hour < 18) setGreeting(t('good_afternoon'));
-    else setGreeting(t('good_evening'));
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(timer);
-  }, [t]);
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
-  const recentNotebooks = notebooks.slice(0, 4);
-  const todayStr = currentTime.toISOString().split('T')[0];
-  const todayEvents = events.filter(e => e.date === todayStr);
+  const hour = now.getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const greetingEmoji = hour < 12 ? '☀️' : hour < 18 ? '👋' : '🌙';
 
-  const eventsForAgenda = useMemo(() => {
-    if (!isMobile || agendaExpanded) return events;
-    const notToday = events.filter(e => e.date !== todayStr);
-    return [...notToday, ...todayEvents.slice(0, 3)];
-  }, [events, isMobile, agendaExpanded, todayStr, todayEvents]);
+  const todayStr = now.toISOString().split('T')[0];
+  const todayEvents = useMemo(() => events.filter(e => e.date === todayStr)
+    .sort((a, b) => a.startTime - b.startTime), [events, todayStr]);
+
+  const upcomingEvents = useMemo(() => events
+    .filter(e => e.date > todayStr)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, 3), [events, todayStr]);
+
+  const todayTasks = useMemo(() => tasks.filter(t => t.dueDate === todayStr), [tasks, todayStr]);
+  const pendingTasks = todayTasks.filter(t => t.status !== 'done');
+  const doneTasks = todayTasks.filter(t => t.status === 'done');
+  const dashboardTodayTasks = useMemo(() => tasks.filter(t => t.dueDate === todayStr), [tasks, todayStr]);
+
+  const recentNotebooks = notebooks.slice(0, 5);
+  const dashboardQuickNotes = useMemo(
+    () => [...quickNotes].sort((a, b) => new Date(b.lastUsedAt).getTime() - new Date(a.lastUsedAt).getTime()),
+    [quickNotes],
+  );
+  const quote = useMemo(() => QUOTES[new Date().getDay() % QUOTES.length], []);
+  const theme = getDashboardTheme(dashboardTheme);
+
+  const dateLabel = now.toLocaleDateString(language === '日本語' ? 'ja-JP' : 'en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  });
+
+  const fade = (delay: number) => ({
+    initial: { opacity: 0, y: 14 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.45, delay, ease: [0.22, 1, 0.36, 1] as [number, number, number, number] },
+  });
 
   return (
-    <div className="h-full min-h-0 flex flex-col gap-5 max-md:gap-5 sm:gap-6 lg:gap-8 overflow-y-auto overflow-x-hidden pb-6 max-md:pb-6 sm:pb-8 [scrollbar-width:thin]">
+    <div className="h-full min-h-0 overflow-y-auto overflow-x-hidden pb-10 [scrollbar-width:thin]">
+      <div className="max-w-5xl mx-auto flex flex-col gap-6 md:gap-7">
 
-      {/* ── Header ── */}
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="flex flex-col gap-3 max-md:gap-4 sm:flex-row sm:items-end sm:justify-between pt-2 max-md:pt-4 shrink-0 min-w-0"
-      >
-        <div className="min-w-0">
-          <p className="text-xs max-md:text-[11px] max-md:font-semibold max-md:tracking-[0.14em] font-semibold text-black/30 uppercase tracking-[0.18em] mb-1 max-md:mb-2 truncate">
-            {currentTime.toLocaleDateString(language === '日本語' ? 'ja-JP' : 'en-US', {
-              weekday: 'long', month: 'long', day: 'numeric'
-            })}
-          </p>
-          <h1 className="text-2xl max-md:text-[22px] max-md:leading-tight sm:text-3xl font-bold tracking-tight text-black truncate">
-            {greeting}, {displayName}
-          </h1>
-        </div>
+        {/* ── Hero Header ── */}
+        <motion.div {...fade(0)} className="pt-0">
+          <div className="px-3 py-5 sm:px-6 sm:py-7 md:px-10 md:py-9">
+            <div className="relative z-10 flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+              <div>
+                <p className="text-white/75 text-[11px] font-semibold uppercase tracking-[0.2em] mb-2">{dateLabel}</p>
+                <h1 className="text-white text-2xl md:text-3xl font-bold tracking-tight leading-tight">
+                  {greetingEmoji} {greeting},<br className="md:hidden" /> {displayName}
+                </h1>
+                <p className="text-white/70 text-sm mt-2 leading-relaxed max-w-sm">
+                  {todayEvents.length > 0
+                    ? `You have ${todayEvents.length} event${todayEvents.length > 1 ? 's' : ''} today${pendingTasks.length > 0 ? ` and ${pendingTasks.length} task${pendingTasks.length > 1 ? 's' : ''} to do` : ''}.`
+                    : pendingTasks.length > 0
+                      ? `${pendingTasks.length} task${pendingTasks.length > 1 ? 's' : ''} on your list today.`
+                      : 'Your schedule is clear. Make it count.'}
+                </p>
+              </div>
 
-        <div className="flex w-full shrink-0 flex-row flex-wrap items-center gap-2 max-md:gap-2.5 sm:mb-1 sm:w-auto sm:items-center">
-          <button
-            type="button"
-            onClick={() => onNavigate('notes')}
-            className="flex max-md:flex-1 md:flex-initial max-md:min-h-10 max-md:h-10 max-md:px-3 max-md:text-[13px] max-md:rounded-lg min-h-[44px] w-full md:w-auto sm:w-auto items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-xl bg-black/[0.04] active:bg-black/[0.08] text-black/70 text-sm font-semibold"
-          >
-            <PenLine size={isMobile ? 13 : 14} />
-            New note
-          </button>
-        </div>
-      </motion.div>
-
-      {/* ── Main grid ── (2 cols from sm: agenda | notebooks + inspiration — matches tablet + narrow desktop) */}
-      <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 max-sm:gap-5 sm:gap-5 w-full min-w-0 sm:items-start shrink-0">
-
-        {/* Today's Agenda */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.08 }}
-          className="sm:col-span-4 flex flex-col min-h-0 min-w-0"
-        >
-          <div className="flex flex-col h-full min-h-0 rounded-2xl max-sm:rounded-xl bg-white border border-black/[0.06] shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-5 max-sm:px-4 py-4 max-sm:py-3.5 border-b border-black/[0.05]">
-              <div className="flex items-center gap-2 max-sm:gap-2.5">
-                <div className="w-7 h-7 max-sm:w-6 max-sm:h-6 rounded-lg bg-[#dbeafe] flex items-center justify-center">
-                  <CalendarIcon size={isMobile ? 12 : 14} className="text-[#1d4ed8]" />
+              {/* Live clock */}
+              <div className="flex items-end gap-6 md:gap-8 shrink-0">
+                <div className="text-right">
+                  <p className="text-white/30 text-[10px] font-semibold uppercase tracking-widest mb-1">Time</p>
+                  <p className="text-white text-3xl md:text-4xl font-bold tabular-nums tracking-tight leading-none">
+                    {pad(hour % 12 || 12)}:{pad(now.getMinutes())}
+                    <span className="text-white/40 text-base font-semibold ml-1">{hour >= 12 ? 'PM' : 'AM'}</span>
+                  </p>
                 </div>
-                <span className="text-sm max-sm:text-[15px] font-semibold text-black">{t('today_agenda')}</span>
+
+                {/* Today stats pills */}
+                <div className="hidden md:flex flex-col gap-2">
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/[0.08] backdrop-blur-sm">
+                    <CalendarIcon size={12} className="text-rose-100" />
+                    <span className="text-white/70 text-xs font-medium tabular-nums">{todayEvents.length} events</span>
+                  </div>
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/[0.08] backdrop-blur-sm">
+                    <CheckSquare size={12} className="text-emerald-300" />
+                    <span className="text-white/70 text-xs font-medium tabular-nums">{doneTasks.length}/{todayTasks.length} tasks</span>
+                  </div>
+                </div>
               </div>
-              {todayEvents.length > 0 && (
-                <span className="text-xs max-sm:text-[11px] font-bold text-[#1d4ed8] bg-[#dbeafe] px-2 py-0.5 rounded-full tabular-nums">
-                  {todayEvents.length} events
-                </span>
-              )}
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-3 max-sm:p-3.5 [scrollbar-width:thin]">
-              <CalendarDayView
-                events={eventsForAgenda}
-                tags={tags}
-                currentDate={currentTime}
-                compact={true}
-              />
-            </div>
-
-            {isMobile && todayEvents.length > 3 && !agendaExpanded && (
-              <div className="px-3 max-sm:px-4 pb-1 max-sm:pb-1.5">
+            {/* Quick actions */}
+            <div className="relative z-10 flex flex-wrap gap-2 mt-6">
+              {[
+                { label: 'New Note', icon: PenLine, tab: 'notes' as const, color: 'bg-white/10 hover:bg-white/15 text-white' },
+                { label: 'Tasks', icon: CheckSquare, tab: 'tasks' as const, color: 'bg-white/10 hover:bg-white/15 text-white' },
+                { label: 'Calendar', icon: CalendarIcon, tab: 'calendar' as const, color: 'bg-white/10 hover:bg-white/15 text-white' },
+              ].map(({ label, icon: Icon, tab, color }) => (
                 <button
-                  type="button"
-                  onClick={() => setAgendaExpanded(true)}
-                  className="w-full min-h-9 rounded-lg text-[13px] font-medium text-[#1d4ed8] active:bg-[#dbeafe]/40"
+                  key={tab}
+                  onClick={() => onNavigate(tab)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all active:scale-95 ${color}`}
                 >
-                  See more
+                  <Icon size={14} />
+                  {label}
                 </button>
-              </div>
-            )}
-
-            <div className="px-4 max-sm:px-4 pb-4 max-sm:pb-4">
-              <button
-                type="button"
-                onClick={() => onNavigate('calendar')}
-                className="w-full max-sm:min-h-10 max-sm:text-[13px] max-sm:rounded-lg min-h-[44px] py-2.5 rounded-xl border border-black/[0.08] text-sm font-semibold text-black/50 active:text-black active:border-black/25 transition-colors flex items-center justify-center gap-1.5"
-              >
-                {t('open_calendar')}
-                <ArrowRight size={11} />
-              </button>
+              ))}
             </div>
           </div>
         </motion.div>
 
-        {/* Right column */}
-        <div className="sm:col-span-8 flex flex-col gap-4 max-sm:gap-5 sm:gap-5 min-h-0 min-w-0">
+        {/* ── Main grid ── */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-5">
 
-          {/* Recent Notebooks */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.13 }}
-          >
-            <div className="flex items-center justify-between mb-3 max-sm:mb-3.5">
-              <h2 className="text-sm max-sm:text-[15px] font-semibold text-black">{t('recent_notebooks')}</h2>
-              <button
-                onClick={() => onNavigate('notes')}
-                className="flex items-center gap-1 text-xs font-semibold text-[#1d4ed8] hover:text-[#1e3a8a] transition-colors"
-              >
-                {t('view_library')}
-                <ArrowRight size={11} />
-              </button>
-            </div>
+          {/* Left column */}
+          <div className="md:col-span-5 flex flex-col gap-4">
 
-            {/* max-md : même rendu que la section Carnets de Notes (scroll horizontal, 122px) */}
-            <div className="md:hidden overflow-x-auto overflow-y-hidden pb-2 -mx-1 px-1 min-w-0 overscroll-x-contain [scrollbar-width:thin] touch-pan-x">
-              <div className="flex flex-nowrap items-stretch gap-2 w-max pr-1">
-                {recentNotebooks.map((notebook, i) => {
-                  const count = notes.filter(n => n.notebookId === notebook.id).length;
-                  const recentNote = notes
-                    .filter(n => n.notebookId === notebook.id)
-                    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
-                  return (
-                    <motion.div
-                      key={notebook.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.35, delay: 0.18 + i * 0.06 }}
-                      whileHover={{ y: -4, transition: { duration: 0.15 } }}
-                      onClick={() => onNavigate('notes', notebook.id)}
-                      className="group cursor-pointer shrink-0 w-[122px]"
-                    >
-                      <div
-                        className="aspect-[3/4] rounded-lg relative overflow-hidden flex flex-col shadow-sm w-full min-w-0"
-                        style={{ backgroundColor: notebook.color }}
-                      >
-                        <div className="absolute left-0 top-0 bottom-0 h-full w-[5px] bg-black/[0.09]" />
-                        <div
-                          className="absolute inset-0 flex flex-col"
-                          style={{ paddingLeft: '12px', paddingTop: '40%', paddingBottom: '30%' }}
-                        >
-                          {[...Array(5)].map((_, j) => (
-                            <div key={j} className="flex-1 border-b" style={{ borderColor: 'rgba(0,0,0,0.07)' }} />
-                          ))}
+            {/* Today's Schedule */}
+            <motion.div {...fade(0.08)}>
+              <div className="bg-white rounded-2xl border border-black/[0.06] shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-black/[0.05]">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center">
+                      <CalendarIcon size={14} className="text-blue-600" />
+                    </div>
+                    <span className="text-sm font-semibold text-black">Today's Schedule</span>
+                  </div>
+                  <button onClick={() => onNavigate('calendar')}
+                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-0.5">
+                    View all <ChevronRight size={12} />
+                  </button>
+                </div>
+
+                <div className="h-[300px] border-b border-black/[0.04] bg-[#f8f8f8]/45">
+                  <CalendarDayView
+                    events={events}
+                    tags={tags}
+                    currentDate={now}
+                    compact
+                  />
+                </div>
+
+                {/* Upcoming */}
+                {upcomingEvents.length > 0 && (
+                  <div className="px-4 pb-4 pt-1 border-t border-black/[0.04] mt-1">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-black/25 mb-2.5 px-0.5">Upcoming</p>
+                    <div className="flex flex-col gap-1.5">
+                      {upcomingEvents.map(ev => (
+                        <div key={ev.id} className="flex items-center gap-2.5 px-0.5 cursor-pointer" onClick={() => onNavigate('calendar')}>
+                          <Clock size={11} className="text-black/25 shrink-0" />
+                          <span className="text-xs text-black/50 font-medium truncate flex-1">{ev.title}</span>
+                          <span className="text-[10px] text-black/30 shrink-0">
+                            {new Date(ev.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </span>
                         </div>
-                        <div className="relative z-10 flex flex-col h-full p-3 gap-1">
-                          <div className="flex justify-between items-start gap-2">
-                            <div className="shrink-0">
-                              {notebook.emoji ? (
-                                <span className="text-lg leading-none">{notebook.emoji}</span>
-                              ) : (
-                                <Book size={16} className="text-black/25 scale-[0.82] origin-top-left" />
-                              )}
-                            </div>
-                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 max-md:opacity-100 transition-opacity shrink-0">
-                              <button
-                                type="button"
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  onNavigate('notes', notebook.id);
-                                }}
-                                className="p-1 hover:bg-black/10 rounded text-black/30 hover:text-black/60 transition-colors"
-                              >
-                                <Type size={11} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  onNavigate('notes', notebook.id);
-                                }}
-                                className="p-1 hover:bg-red-50/60 rounded text-black/30 hover:text-red-400 transition-colors"
-                              >
-                                <Trash2 size={11} />
-                              </button>
-                            </div>
-                          </div>
-                          <div className="mt-auto min-w-0 min-h-0">
-                            <h4 className="font-bold text-xs leading-tight line-clamp-2 mb-0">{notebook.title}</h4>
-                            {recentNote ? (
-                              <p className="text-[8px] text-black/30 truncate mb-0 line-clamp-1">{recentNote.title}</p>
-                            ) : null}
-                            <p className="text-[8px] font-bold text-black/25 uppercase tracking-wide">
-                              {count} {t('pages')}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* ≥768px : cartes plus larges + pastille ouvrir */}
-            <div className="hidden md:flex md:flex-row md:flex-wrap md:items-stretch md:gap-2 lg:gap-2.5 min-w-0">
-              {recentNotebooks.map((notebook, i) => (
-                <motion.div
-                  key={notebook.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: 0.18 + i * 0.06 }}
-                  whileHover={{ y: -3, transition: { duration: 0.15 } }}
-                  onClick={() => onNavigate('notes', notebook.id)}
-                  className="cursor-pointer group md:w-[146px] lg:w-[158px] shrink-0 min-w-0"
-                >
-                  <div
-                    className="aspect-[3/4] rounded-lg relative overflow-hidden flex flex-col shadow-sm w-full min-w-0 md:hover:shadow-md transition-all"
-                    style={{ backgroundColor: notebook.color }}
-                  >
-                    <div className="absolute left-0 top-0 bottom-0 h-full w-[5px] md:w-1.5 bg-black/[0.09]" />
-
-                    <div
-                      className="pointer-events-none absolute inset-0 flex flex-col"
-                      style={{ paddingLeft: '12px', paddingTop: '40%', paddingBottom: '30%' }}
-                    >
-                      {[...Array(5)].map((_, j) => (
-                        <div key={j} className="flex-1 border-b" style={{ borderColor: 'rgba(0,0,0,0.07)' }} />
                       ))}
                     </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
 
-                    <div className="relative z-10 flex flex-col h-full min-h-0 p-3.5 gap-1.5">
-                      <div className="flex justify-between items-start gap-2">
-                        <div className="shrink-0">
-                          {notebook.emoji ? (
-                            <span className="text-lg md:text-xl leading-none">{notebook.emoji}</span>
+            {/* Tasks */}
+            <motion.div {...fade(0.14)}>
+              <div className="bg-white rounded-2xl border border-black/[0.06] shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-black/[0.05]">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center">
+                      <CheckSquare size={14} className="text-emerald-600" />
+                    </div>
+                    <span className="text-sm font-semibold text-black">Tasks</span>
+                    {pendingTasks.length > 0 && (
+                      <span className="text-[10px] font-bold bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded-full tabular-nums">
+                        {pendingTasks.length}
+                      </span>
+                    )}
+                  </div>
+                  <button onClick={() => onNavigate('tasks')}
+                    className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-800 transition-colors flex items-center gap-0.5">
+                    View all <ChevronRight size={12} />
+                  </button>
+                </div>
+
+                <div className="p-4 flex flex-col gap-1.5">
+                  {dashboardTodayTasks.length === 0 ? (
+                    <div className="py-6 flex flex-col items-center gap-2 text-center">
+                      <div className="w-10 h-10 rounded-xl bg-black/[0.03] flex items-center justify-center">
+                        <CheckCircle2 size={18} className="text-emerald-400" />
+                      </div>
+                      <p className="text-sm text-black/30 font-medium">No tasks due today.</p>
+                      <button onClick={() => onNavigate('tasks')}
+                        className="text-xs text-emerald-600 font-semibold hover:text-emerald-800 transition-colors">
+                        Add a task →
+                      </button>
+                    </div>
+                  ) : (
+                    dashboardTodayTasks.map(task => (
+                      <div key={task.id}
+                        className="flex items-start gap-3 p-2.5 rounded-xl hover:bg-black/[0.02] transition-colors group cursor-pointer"
+                        onClick={() => onNavigate('tasks')}>
+                        <button
+                          type="button"
+                          onClick={e => {
+                            e.stopPropagation();
+                            onCompleteTask(task);
+                          }}
+                          className="mt-0.5 shrink-0 rounded-full p-0.5 text-black/15 hover:text-emerald-500 transition-colors"
+                          title={task.status === 'done' ? 'Completed' : 'Mark as done'}
+                          aria-label={task.status === 'done' ? `${task.title} is completed` : `Mark ${task.title} as done`}
+                        >
+                          {task.status === 'done' ? (
+                            <CheckCircle2 size={16} className="text-emerald-500" />
                           ) : (
-                            <Book size={16} className="text-black/25 scale-[0.82] origin-top-left md:scale-90 md:w-[18px] md:h-[18px]" />
+                            <Circle size={15} className="group-hover:text-emerald-400 transition-colors" />
+                          )}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium leading-tight truncate ${task.status === 'done' ? 'text-black/35 line-through' : 'text-black/70'}`}>
+                            {task.title}
+                          </p>
+                          {task.dueDate && (
+                            <p className="text-[10px] text-black/30 mt-0.5 font-medium">
+                              {task.status === 'done'
+                                ? 'Completed today'
+                                : `Due ${task.dueDate === todayStr ? 'today' : new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                            </p>
                           )}
                         </div>
+                        {[1,2,3,4,5].map(i => (
+                          <div key={i} className={`w-1 h-1 rounded-full mt-1.5 ${i <= task.importance ? 'bg-amber-400' : 'bg-black/10'}`} />
+                        ))}
                       </div>
-                      <div className="mt-auto min-w-0 min-h-0">
-                        <h4 className="font-bold text-xs md:text-[13px] leading-tight line-clamp-2 text-black">
-                          {notebook.title}
-                        </h4>
-                        <p className="text-[8px] md:text-[9px] font-bold text-black/25 uppercase tracking-wide mt-0.5">
-                          {t('two_hours_ago')}
-                        </p>
-                      </div>
-                    </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </div>
 
-                    <div className="absolute bottom-2 right-2 z-20 w-7 h-7 rounded-md bg-black/80 flex items-center justify-center opacity-0 md:group-hover:opacity-100 transition-opacity">
-                      <ArrowRight size={10} color="white" />
+          {/* Right column */}
+          <div className="md:col-span-7 flex flex-col gap-4">
+
+            {/* Recent notebooks */}
+            <motion.div {...fade(0.1)}>
+              <div className="bg-white rounded-2xl border border-black/[0.06] shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-black/[0.05]">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-violet-50 flex items-center justify-center">
+                      <Book size={14} className="text-violet-600" />
                     </div>
+                    <span className="text-sm font-semibold text-black">Recent Notebooks</span>
                   </div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* Inspiration card */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.28 }}
-            className="rounded-2xl overflow-hidden relative border border-black/[0.06] shadow-sm min-h-[200px] max-md:min-h-[172px] sm:min-h-[220px]"
-            style={{
-              background: 'linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 60%, #3b82f6 100%)',
-            }}
-          >
-            <svg className="absolute inset-0 w-full h-full opacity-[0.06] pointer-events-none" viewBox="0 0 600 200">
-              {[20, 60, 100, 140, 180].map((y, i) => (
-                <path key={i}
-                  d={`M 0 ${y} C 120 ${y - 14}, 280 ${y + 14}, 400 ${y} C 500 ${y - 10}, 560 ${y + 8}, 600 ${y}`}
-                  fill="none" stroke="white" strokeWidth="1"
-                />
-              ))}
-            </svg>
-
-            <div className="relative z-10 p-5 max-md:p-4 sm:p-7 flex flex-col min-h-[inherit] justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-4 max-md:mb-3">
-                  <Sparkles size={isMobile ? 12 : 13} className="text-blue-200/60" />
-                  <span className="text-[10px] max-md:text-[11px] font-bold uppercase tracking-[0.2em] text-blue-200/60">
-                    Daily Inspiration
-                  </span>
+                  <button onClick={() => onNavigate('notes')}
+                    className="text-[11px] font-semibold text-violet-600 hover:text-violet-800 transition-colors flex items-center gap-0.5">
+                    View all <ChevronRight size={12} />
+                  </button>
                 </div>
-                <p className="text-lg max-md:text-[15px] max-md:leading-snug font-semibold text-white max-w-lg">
-                  "{t('quote')}"
-                </p>
-                <p className="text-xs max-md:text-[11px] font-semibold text-white/40 mt-3 max-md:mt-3 uppercase tracking-widest">
-                  {t('author')}
-                </p>
+
+                <div className="p-4">
+                  {recentNotebooks.length === 0 ? (
+                    <div className="py-6 flex flex-col items-center gap-2 text-center">
+                      <div className="w-10 h-10 rounded-xl bg-black/[0.03] flex items-center justify-center">
+                        <Book size={18} className="text-black/20" />
+                      </div>
+                      <p className="text-sm text-black/30 font-medium">No notebooks yet</p>
+                      <button onClick={() => onNavigate('notes')}
+                        className="text-xs text-violet-600 font-semibold hover:text-violet-800 transition-colors">
+                        Create your first notebook →
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none]">
+                      {recentNotebooks.map((nb, i) => {
+                        const count = notes.filter(n => n.notebookId === nb.id).length;
+                        return (
+                          <motion.button
+                            key={nb.id}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.3, delay: 0.12 + i * 0.05 }}
+                            whileHover={{ y: -3, transition: { duration: 0.15 } }}
+                            onClick={() => onNavigate('notes', nb.id)}
+                            className="shrink-0 w-[110px] md:w-[120px] cursor-pointer group"
+                          >
+                            <div className="aspect-[3/4] rounded-xl relative overflow-hidden flex flex-col shadow-sm w-full"
+                              style={{ backgroundColor: nb.color }}>
+                              {/* Spine */}
+                              <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-black/[0.08]" />
+                              {/* Lines */}
+                              <div className="pointer-events-none absolute inset-0 flex flex-col"
+                                style={{ paddingLeft: 10, paddingTop: '38%', paddingBottom: '28%' }}>
+                                {[...Array(5)].map((_, j) => (
+                                  <div key={j} className="flex-1 border-b" style={{ borderColor: 'rgba(0,0,0,0.06)' }} />
+                                ))}
+                              </div>
+                              {/* Content */}
+                              <div className="relative z-10 flex flex-col h-full p-3 gap-1">
+                                <div className="text-base leading-none">
+                                  {nb.emoji ?? <Book size={14} className="text-black/20" />}
+                                </div>
+                                <div className="mt-auto">
+                                  <p className="text-[11px] font-bold text-black/75 leading-tight line-clamp-2">{nb.title}</p>
+                                  <p className="text-[9px] font-bold text-black/30 uppercase tracking-wide mt-0.5">{count} {count === 1 ? 'page' : 'pages'}</p>
+                                </div>
+                              </div>
+                              {/* Hover arrow */}
+                              <div className="absolute bottom-2 right-2 w-6 h-6 rounded-lg bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                                <ArrowRight size={9} color="white" />
+                              </div>
+                            </div>
+                          </motion.button>
+                        );
+                      })}
+                      {/* New notebook shortcut */}
+                      <motion.button
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.3, delay: 0.35 }}
+                        onClick={() => onNavigate('notes')}
+                        className="shrink-0 w-[110px] md:w-[120px] cursor-pointer"
+                      >
+                        <div className="aspect-[3/4] rounded-xl border-2 border-dashed border-black/[0.08] flex flex-col items-center justify-center gap-2 bg-black/[0.01] hover:bg-black/[0.03] transition-colors">
+                          <div className="w-7 h-7 rounded-lg bg-black/[0.05] flex items-center justify-center">
+                            <PenLine size={13} className="text-black/30" />
+                          </div>
+                          <p className="text-[10px] font-semibold text-black/30 text-center leading-tight px-2">New notebook</p>
+                        </div>
+                      </motion.button>
+                    </div>
+                  )}
+                </div>
               </div>
+            </motion.div>
 
-              <div
-                className="flex items-center gap-3 max-md:gap-2.5 mt-5 max-md:mt-4 p-4 max-md:p-3 rounded-xl"
-                style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(8px)' }}
-              >
-                <div className="w-8 h-8 max-md:w-7 max-md:h-7 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
-                  <Zap size={isMobile ? 14 : 15} className="text-white" />
+            {/* Daily Spark — full width */}
+            <motion.div {...fade(0.18)} className="w-full">
+              <div className="rounded-2xl border border-black/[0.06] shadow-sm overflow-hidden relative min-h-[140px] sm:min-h-[160px]"
+                style={{ background: theme.gradient }}>
+                <div className="pointer-events-none absolute inset-0">
+                  <div className="absolute top-[-32%] right-[-8%] w-56 h-56 rounded-full blur-3xl opacity-20" style={{background: theme.orbA}} />
+                  <div className="absolute bottom-[-40%] left-[8%] w-44 h-44 rounded-full blur-3xl opacity-15" style={{background: theme.orbB}} />
                 </div>
-                <div>
-                  <p className="text-[10px] max-md:text-[11px] font-bold uppercase tracking-widest text-white/40 mb-0.5">
-                    {t('productivity_tip')}
-                  </p>
-                  <p className="text-xs max-md:text-[13px] font-medium text-white/70 leading-snug">
-                    {t('tip_text')}
-                  </p>
+                <div className="absolute top-3 right-3 opacity-10">
+                  <Sparkles size={48} className="text-white" />
+                </div>
+                <div className="relative z-10 p-5 sm:p-6 md:p-7 flex flex-col gap-3 justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/75 mb-3">Daily Spark</p>
+                    <p className="text-sm sm:text-base font-semibold text-white leading-relaxed max-w-3xl">"{quote.text}"</p>
+                    {quote.author && (
+                      <p className="text-[11px] text-white/35 font-medium mt-2 uppercase tracking-widest">— {quote.author}</p>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
 
-            <div
-              className="absolute top-[-40%] right-[-10%] w-72 h-72 rounded-full blur-3xl pointer-events-none"
-              style={{ background: 'rgba(96, 165, 250, 0.15)' }}
-            />
-          </motion.div>
-
+            {/* Post-its */}
+            <motion.div {...fade(0.22)} className="w-full">
+              <div className="bg-white rounded-2xl border border-black/[0.06] shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-black/[0.05]">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center">
+                      <StickyNote size={14} className="text-amber-600" />
+                    </div>
+                    <span className="text-sm font-semibold text-black">Post-its</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('notes')}
+                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-0.5"
+                  >
+                    {t('my_notes')} <ChevronRight size={12} />
+                  </button>
+                </div>
+                <div className="px-4 py-4 sm:px-5 sm:py-5">
+                  {dashboardQuickNotes.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 px-4 text-center rounded-xl bg-black/[0.02] border border-dashed border-black/[0.06]">
+                      <StickyNote size={28} className="text-black/15 mb-3" />
+                      <p className="text-sm font-medium text-black/45 mb-1">No post-its yet</p>
+                      <p className="text-xs text-black/30 mb-4 max-w-xs">Create colorful quick notes in Notes — they will show up here.</p>
+                      <button
+                        type="button"
+                        onClick={() => onNavigate('notes')}
+                        className="text-xs font-bold uppercase tracking-wider text-blue-600 hover:text-blue-800"
+                      >
+                        Go to Notes
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto overflow-y-hidden pb-1 -mx-1 px-1 min-w-0 overscroll-x-contain [scrollbar-width:thin] touch-pan-x">
+                      <div className="flex flex-nowrap items-stretch gap-3 w-max pr-1">
+                        {dashboardQuickNotes.map(qn => (
+                          <button
+                            key={qn.id}
+                            type="button"
+                            onClick={() => onNavigate('notes')}
+                            className="shrink-0 w-[148px] sm:w-[168px] rounded-xl shadow-sm text-left flex flex-col justify-between aspect-[1.02/1] p-3 relative overflow-hidden border border-black/[0.04] hover:brightness-[0.98] active:scale-[0.99] transition-all"
+                            style={{ backgroundColor: qn.color }}
+                          >
+                            <div className="min-h-0 flex flex-col gap-1">
+                              <p className="text-[7px] font-bold text-black/30 uppercase tracking-wider">
+                                {new Date(qn.createdAt).toLocaleDateString()}
+                              </p>
+                              <h4 className="font-display font-bold text-[13px] leading-snug line-clamp-2 text-black/85">
+                                {qn.title || 'Untitled'}
+                              </h4>
+                              <p className="text-[11px] text-black/55 line-clamp-3 leading-snug">
+                                {qn.content || '—'}
+                              </p>
+                            </div>
+                            <p className="text-[7px] font-bold text-black/25 uppercase tracking-wider pt-1 truncate">
+                              {new Date(qn.lastUsedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </div>
         </div>
-      </div>
 
-      {/* Focus : plante + minuteur dans le flux (pas de bouton séparé) */}
-      <div className="shrink-0 w-full min-w-0 mt-6 sm:mt-8 pt-6 sm:pt-8 border-t border-black/[0.08] flex flex-col gap-4">
-        <div className="px-0.5">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-black/35 mb-1">{t('focus_session')}</p>
-          <p className="text-sm text-black/45 max-w-xl">{t('focus_session_hint')}</p>
-        </div>
-        <div className="w-full max-w-4xl mx-auto min-w-0">
+        {/* ── Focus Timer ── */}
+        <motion.div {...fade(0.3)} className="shrink-0">
+          <div className="flex items-center gap-2 mb-3 px-0.5">
+            <div className="w-1 h-4 rounded-full bg-blue-500" />
+            <p className="text-sm font-semibold text-black/60">Focus Session</p>
+          </div>
           <PomodoroTimer embedded />
-        </div>
+        </motion.div>
+
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import {supabase} from './supabase';
 import type {PDFFile} from '../types';
+import {LIMITS, limitError} from './limits';
 
 const BUCKET = 'pdfs';
 
@@ -28,10 +29,17 @@ export async function getPdfs(): Promise<PDFFile[]> {
 }
 
 export async function uploadPdf(file: File, folderId: string): Promise<PDFFile> {
+  if (file.size > LIMITS.pdfFileSizeBytes)
+    throw new Error(`File is too large. Maximum size is ${LIMITS.pdfFileSizeMB} MB.`);
+
   const {
     data: {user},
   } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
+
+  const {count} = await supabase.from('pdf_files').select('id', {count: 'exact', head: true}).eq('user_id', user.id);
+  if ((count ?? 0) >= LIMITS.pdfs)
+    throw new Error(limitError('PDFs', LIMITS.pdfs));
 
   const id = crypto.randomUUID();
   const storagePath = `${user.id}/${id}/${file.name}`;

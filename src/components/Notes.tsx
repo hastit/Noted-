@@ -6,6 +6,7 @@ import { Notebook, Folder as FolderType, Note, PDFFile, QuickNote, Task } from '
 import { useLanguage } from '../context/LanguageContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 import * as pdfService from '../lib/pdfFiles';
+import { LIMITS, limitError } from '../lib/limits';
 import MobileFab from './MobileFab';
 
 const NOTEBOOK_COLORS = [
@@ -75,6 +76,7 @@ interface NotesProps {
   folders: FolderType[];
   notes: Note[];
   quickNotes: QuickNote[];
+  onImmersiveModeChange?: (immersive: boolean) => void;
   onNotebooksChange: (notebooks: Notebook[]) => void;
   onFoldersChange: (folders: FolderType[]) => void;
   onNotesChange: (notes: Note[]) => void;
@@ -92,6 +94,7 @@ export default function Notes({
   folders,
   notes,
   quickNotes,
+  onImmersiveModeChange,
   onNotebooksChange,
   onFoldersChange,
   onNotesChange,
@@ -317,6 +320,10 @@ export default function Notes({
 
   const handleCreateNotebook = () => {
     if (!newNotebookTitle.trim()) return;
+    if (notebooks.length >= LIMITS.notebooks) {
+      alert(limitError('notebooks', LIMITS.notebooks));
+      return;
+    }
     const newNb: Notebook = {
       id: crypto.randomUUID(),
       title: newNotebookTitle,
@@ -346,7 +353,24 @@ export default function Notes({
     setIsCreatingFolder(false);
   };
 
+  const handleRenameFolder = (folderId: string) => {
+    const folder = folders.find(f => f.id === folderId);
+    if (!folder) return;
+    const nextTitle = prompt('Enter folder title', folder.title);
+    if (!nextTitle) return;
+    const trimmed = nextTitle.trim();
+    if (!trimmed) return;
+    onFoldersChange(folders.map(f => (f.id === folderId ? {...f, title: trimmed} : f)));
+    if (selectedFolder?.id === folderId) {
+      setSelectedFolder({...selectedFolder, title: trimmed});
+    }
+  };
+
   const handleCreateQuickNote = () => {
+    if (quickNotes.length >= LIMITS.quickNotes) {
+      alert(limitError('quick notes', LIMITS.quickNotes));
+      return;
+    }
     const newNote: QuickNote = {
       id: crypto.randomUUID(),
       title: t('untitled_note'),
@@ -385,8 +409,14 @@ export default function Notes({
       const newPdf = await pdfService.uploadPdf(file, selectedFolder.id);
       setPdfs(prev => [newPdf, ...prev]);
     } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to upload PDF.';
+      // Limit/size errors should not fall back — show the message and stop
+      if (msg.includes('too large') || msg.includes('limit of')) {
+        alert(msg);
+        return;
+      }
+      // Storage not set up yet — show locally for this session
       console.error('PDF upload failed, using local fallback:', err);
-      // Fallback: show PDF locally for this session while storage is being set up
       const localPdf: PDFFile = {
         id: crypto.randomUUID(),
         title: file.name,
@@ -401,6 +431,11 @@ export default function Notes({
   };
 
   const handleCreateNote = async (notebookId: string) => {
+    const notesInNotebook = notes.filter(n => n.notebookId === notebookId).length;
+    if (notesInNotebook >= LIMITS.notesPerNotebook) {
+      alert(limitError('notes in this notebook', LIMITS.notesPerNotebook));
+      return;
+    }
     const initialBlocks: NoteBlock[] = [{ id: 'b1', type: 'text', content: '' }];
     const localDraft: Note = {
       id: Math.random().toString(36).substr(2, 9),
@@ -507,6 +542,13 @@ export default function Notes({
     }
   }, [selectedNotebook, notes, isMobile]);
 
+  useEffect(() => {
+    if (!onImmersiveModeChange) return;
+    // Hide global app chrome only when we are inside notebook/page flows.
+    onImmersiveModeChange(Boolean(selectedNotebook || selectedPdf));
+    return () => onImmersiveModeChange(false);
+  }, [selectedNotebook, selectedPdf, onImmersiveModeChange]);
+
   return (
     <div className="h-full min-h-0 flex flex-col overflow-x-hidden">
       <AnimatePresence mode="wait">
@@ -578,7 +620,14 @@ export default function Notes({
                           <div className="w-8 h-8 md:w-7 md:h-7 rounded-lg bg-white/40 flex items-center justify-center">
                             <Folder size={17} className="text-black/60 md:w-[15px] md:h-[15px]" />
                           </div>
-                          <button type="button" className="p-1 text-black/20 hover:text-black/40 md:p-0.5">
+                          <button
+                            type="button"
+                            onClick={e => {
+                              e.stopPropagation();
+                              handleRenameFolder(folder.id);
+                            }}
+                            className="p-1 text-black/20 hover:text-black/40 md:p-0.5"
+                          >
                             <MoreVertical size={16} className="md:w-[14px] md:h-[14px]" />
                           </button>
                         </div>
@@ -605,7 +654,10 @@ export default function Notes({
                         </div>
                         <button
                           type="button"
-                          onClick={e => { e.stopPropagation(); }}
+                          onClick={e => {
+                            e.stopPropagation();
+                            handleRenameFolder(folder.id);
+                          }}
                           className="shrink-0 p-1.5 rounded-md text-black/25 active:bg-black/10"
                           aria-label="Menu"
                         >
