@@ -1,10 +1,11 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Check, Folder, Search, MoreVertical, Book, ChevronRight, ChevronDown, X, Save, Trash2, Type, Heading1, Heading2, Heading3, Image as ImageIcon, FileText, ArrowLeft, Upload, List, ListOrdered, ListTodo, CheckSquare } from 'lucide-react';
 import { MOCK_NOTEBOOKS, MOCK_FOLDERS, MOCK_NOTES, MOCK_QUICK_NOTES } from '../constants';
 import { Notebook, Folder as FolderType, Note, PDFFile, QuickNote, Task } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { useIsMobile } from '../hooks/useIsMobile';
+import * as pdfService from '../lib/pdfFiles';
 import MobileFab from './MobileFab';
 
 const NOTEBOOK_COLORS = [
@@ -105,7 +106,12 @@ export default function Notes({
   const { t } = useLanguage();
   const isMobile = useIsMobile();
   const [pdfs, setPdfs] = useState<PDFFile[]>([]);
-  
+  const [pdfUploading, setPdfUploading] = useState(false);
+
+  useEffect(() => {
+    pdfService.getPdfs().then(setPdfs).catch(console.error);
+  }, []);
+
   const [selectedNotebook, setSelectedNotebook] = useState<Notebook | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<FolderType | null>(null);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
@@ -312,7 +318,7 @@ export default function Notes({
   const handleCreateNotebook = () => {
     if (!newNotebookTitle.trim()) return;
     const newNb: Notebook = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       title: newNotebookTitle,
       color: newNotebookColor,
       emoji: newNotebookEmoji || undefined,
@@ -329,7 +335,7 @@ export default function Notes({
   const handleCreateFolder = () => {
     if (!newFolderTitle.trim()) return;
     const newFolder: FolderType = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       title: newFolderTitle,
       color: NOTEBOOK_COLORS[Math.floor(Math.random() * NOTEBOOK_COLORS.length)],
       createdAt: new Date().toISOString(),
@@ -342,7 +348,7 @@ export default function Notes({
 
   const handleCreateQuickNote = () => {
     const newNote: QuickNote = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       title: t('untitled_note'),
       content: '',
       color: NOTEBOOK_COLORS[Math.floor(Math.random() * NOTEBOOK_COLORS.length)],
@@ -370,18 +376,28 @@ export default function Notes({
     }
   };
 
-  const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedFolder) return;
-
-    const newPdf: PDFFile = {
-      id: Math.random().toString(36).substr(2, 9),
-      title: file.name,
-      url: URL.createObjectURL(file),
-      folderId: selectedFolder.id,
-      uploadedAt: new Date().toISOString(),
-    };
-    setPdfs(prev => [...prev, newPdf]);
+    e.target.value = '';
+    setPdfUploading(true);
+    try {
+      const newPdf = await pdfService.uploadPdf(file, selectedFolder.id);
+      setPdfs(prev => [newPdf, ...prev]);
+    } catch (err) {
+      console.error('PDF upload failed, using local fallback:', err);
+      // Fallback: show PDF locally for this session while storage is being set up
+      const localPdf: PDFFile = {
+        id: crypto.randomUUID(),
+        title: file.name,
+        url: URL.createObjectURL(file),
+        folderId: selectedFolder.id,
+        uploadedAt: new Date().toISOString(),
+      };
+      setPdfs(prev => [localPdf, ...prev]);
+    } finally {
+      setPdfUploading(false);
+    }
   };
 
   const handleCreateNote = async (notebookId: string) => {
@@ -810,17 +826,18 @@ export default function Notes({
                 </div>
               </div>
               <div className="flex gap-3 max-md:gap-2.5 max-md:flex-wrap">
-                <button 
+                <button
                   onClick={() => pdfInputRef.current?.click()}
-                  className="px-6 h-12 bg-black/5 text-black/60 rounded-2xl flex items-center gap-2 hover:bg-black/10 transition-colors font-bold text-sm"
+                  disabled={pdfUploading}
+                  className="px-6 h-12 bg-black/5 text-black/60 rounded-2xl flex items-center gap-2 hover:bg-black/10 transition-colors font-bold text-sm disabled:opacity-50 disabled:pointer-events-none"
                 >
                   <Upload size={18} />
-                  {t('upload_pdf')}
+                  {pdfUploading ? 'Uploading…' : t('upload_pdf')}
                 </button>
-                <input 
+                <input
                   type="file"
                   ref={pdfInputRef}
-                  onChange={handlePdfUpload}
+                  onChange={e => void handlePdfUpload(e)}
                   accept="application/pdf"
                   className="hidden"
                 />

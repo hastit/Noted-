@@ -93,3 +93,98 @@ create policy "calendar_events_update_own" on public.calendar_events
   for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "calendar_events_delete_own" on public.calendar_events
   for delete using (auth.uid() = user_id);
+
+-- ── folders ─────────────────────────────────────────────────────────
+create table if not exists public.folders (
+  id uuid primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  title text not null default '',
+  color text,
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz not null default now()
+);
+
+create index if not exists folders_user_id_idx on public.folders (user_id);
+
+alter table public.folders enable row level security;
+
+create policy "folders_select_own" on public.folders
+  for select using (auth.uid() = user_id);
+create policy "folders_insert_own" on public.folders
+  for insert with check (auth.uid() = user_id);
+create policy "folders_update_own" on public.folders
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "folders_delete_own" on public.folders
+  for delete using (auth.uid() = user_id);
+
+-- ── notebooks ────────────────────────────────────────────────────────
+create table if not exists public.notebooks (
+  id uuid primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  title text not null default '',
+  color text not null default '#F4F4F4',
+  emoji text,
+  folder_id uuid references public.folders (id) on delete set null,
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz not null default now()
+);
+
+create index if not exists notebooks_user_id_idx on public.notebooks (user_id);
+
+alter table public.notebooks enable row level security;
+
+create policy "notebooks_select_own" on public.notebooks
+  for select using (auth.uid() = user_id);
+create policy "notebooks_insert_own" on public.notebooks
+  for insert with check (auth.uid() = user_id);
+create policy "notebooks_update_own" on public.notebooks
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "notebooks_delete_own" on public.notebooks
+  for delete using (auth.uid() = user_id);
+
+-- ── quick_notes ──────────────────────────────────────────────────────
+create table if not exists public.quick_notes (
+  id uuid primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  title text not null default '',
+  content text not null default '',
+  color text not null default '#FFFFFF',
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz not null default now()
+);
+
+create index if not exists quick_notes_user_id_idx on public.quick_notes (user_id);
+
+alter table public.quick_notes enable row level security;
+
+create policy "quick_notes_select_own" on public.quick_notes
+  for select using (auth.uid() = user_id);
+create policy "quick_notes_insert_own" on public.quick_notes
+  for insert with check (auth.uid() = user_id);
+create policy "quick_notes_update_own" on public.quick_notes
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "quick_notes_delete_own" on public.quick_notes
+  for delete using (auth.uid() = user_id);
+
+-- ── pdf_files ────────────────────────────────────────────────────────
+create table if not exists public.pdf_files (
+  id uuid primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  title text not null,
+  storage_path text not null,
+  url text not null,
+  folder_id uuid references public.folders (id) on delete cascade,
+  uploaded_at timestamptz not null default now()
+);
+
+create index if not exists pdf_files_user_id_idx on public.pdf_files (user_id);
+create index if not exists pdf_files_folder_id_idx on public.pdf_files (folder_id);
+
+alter table public.pdf_files enable row level security;
+
+create policy "pdf_files_select_own" on public.pdf_files
+  for select using (auth.uid() = user_id);
+create policy "pdf_files_insert_own" on public.pdf_files
+  for insert with check (auth.uid() = user_id);
+create policy "pdf_files_delete_own" on public.pdf_files
+  for delete using (auth.uid() = user_id);

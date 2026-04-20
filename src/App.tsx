@@ -26,6 +26,9 @@ import {AuthProvider, useAuth} from './context/AuthContext';
 import * as notesService from './lib/notes';
 import * as tasksService from './lib/tasks';
 import * as calendarService from './lib/calendar';
+import * as notebooksService from './lib/notebooks';
+import * as foldersService from './lib/folders';
+import * as quickNotesService from './lib/quickNotes';
 import {isRecoveryImplicitHash} from './lib/authRecoveryHash';
 
 const Landing = lazy(() => import('./pages/Landing'));
@@ -132,27 +135,69 @@ function AuthenticatedApp() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [tags, setTags] = useState<Tag[]>(DEFAULT_TAGS);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [notebooks, setNotebooksState] = useState<Notebook[]>(() => loadLS<Notebook[]>(LS_NOTEBOOKS, []));
-  const [folders, setFoldersState] = useState<Folder[]>(() => loadLS<Folder[]>(LS_FOLDERS, []));
+  const [notebooks, setNotebooksState] = useState<Notebook[]>([]);
+  const [folders, setFoldersState] = useState<Folder[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [quickNotes, setQuickNotesState] = useState<QuickNote[]>(() => loadLS<QuickNote[]>(LS_QUICK, []));
+  const [quickNotes, setQuickNotesState] = useState<QuickNote[]>([]);
   const [selectedNotebookId, setSelectedNotebookId] = useState<string | null>(null);
 
   const notePersistTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-  const setNotebooks = useCallback((nbs: Notebook[]) => {
-    setNotebooksState(nbs);
-    saveLS(LS_NOTEBOOKS, nbs);
+  // Refs so sync callbacks always see the latest state without stale closures
+  const notebooksRef = useRef<Notebook[]>([]);
+  const foldersRef = useRef<Folder[]>([]);
+  const quickNotesRef = useRef<QuickNote[]>([]);
+
+  useEffect(() => { notebooksRef.current = notebooks; }, [notebooks]);
+  useEffect(() => { foldersRef.current = folders; }, [folders]);
+  useEffect(() => { quickNotesRef.current = quickNotes; }, [quickNotes]);
+
+  const setNotebooks = useCallback((next: Notebook[]) => {
+    const prev = notebooksRef.current;
+    setNotebooksState(next);
+    const prevMap = new Map(prev.map(n => [n.id, n]));
+    const nextMap = new Map(next.map(n => [n.id, n]));
+    for (const nb of next) {
+      const old = prevMap.get(nb.id);
+      if (!old || JSON.stringify(old) !== JSON.stringify(nb))
+        notebooksService.upsertNotebook(nb).catch(console.error);
+    }
+    for (const nb of prev) {
+      if (!nextMap.has(nb.id))
+        notebooksService.deleteNotebook(nb.id).catch(console.error);
+    }
   }, []);
 
-  const setFolders = useCallback((f: Folder[]) => {
-    setFoldersState(f);
-    saveLS(LS_FOLDERS, f);
+  const setFolders = useCallback((next: Folder[]) => {
+    const prev = foldersRef.current;
+    setFoldersState(next);
+    const prevMap = new Map(prev.map(f => [f.id, f]));
+    const nextMap = new Map(next.map(f => [f.id, f]));
+    for (const f of next) {
+      const old = prevMap.get(f.id);
+      if (!old || JSON.stringify(old) !== JSON.stringify(f))
+        foldersService.upsertFolder(f).catch(console.error);
+    }
+    for (const f of prev) {
+      if (!nextMap.has(f.id))
+        foldersService.deleteFolder(f.id).catch(console.error);
+    }
   }, []);
 
-  const setQuickNotes = useCallback((q: QuickNote[]) => {
-    setQuickNotesState(q);
-    saveLS(LS_QUICK, q);
+  const setQuickNotes = useCallback((next: QuickNote[]) => {
+    const prev = quickNotesRef.current;
+    setQuickNotesState(next);
+    const prevMap = new Map(prev.map(q => [q.id, q]));
+    const nextMap = new Map(next.map(q => [q.id, q]));
+    for (const q of next) {
+      const old = prevMap.get(q.id);
+      if (!old || JSON.stringify(old) !== JSON.stringify(q))
+        quickNotesService.upsertQuickNote(q).catch(console.error);
+    }
+    for (const q of prev) {
+      if (!nextMap.has(q.id))
+        quickNotesService.deleteQuickNote(q.id).catch(console.error);
+    }
   }, []);
 
   const mergedNotebooks = useMemo(() => mergeNotebooksForNotes(notebooks, notes), [notebooks, notes]);
@@ -163,15 +208,21 @@ function AuthenticatedApp() {
     (async () => {
       setDataLoading(true);
       try {
-        const [n, t, e] = await Promise.all([
+        const [n, t, e, nbs, flds, qn] = await Promise.all([
           notesService.getNotes(),
           tasksService.getTasks(),
           calendarService.getEvents(),
+          notebooksService.getNotebooks(),
+          foldersService.getFolders(),
+          quickNotesService.getQuickNotes(),
         ]);
         if (!cancelled) {
           setNotes(n);
           setTasks(t);
           setEvents(e);
+          setNotebooksState(nbs);
+          setFoldersState(flds);
+          setQuickNotesState(qn);
         }
       } catch (e) {
         console.error(e);
