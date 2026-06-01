@@ -1,16 +1,7 @@
-import {Plus, Trash2} from 'lucide-react';
+import {Plus} from 'lucide-react';
 import {useMemo, useState} from 'react';
 import {categorizeBlock} from '../../utils/blockCategories';
 import type {RecurringColorCategory} from '../../types/recurringSchedule';
-
-type DraftEntry = {
-  id: string;
-  title: string;
-  dayOfWeek: number;
-  startTime: string;
-  endTime: string;
-  colorCategory: RecurringColorCategory;
-};
 
 type FormSlot = {
   id: string;
@@ -32,7 +23,15 @@ type Props = {
   ) => Promise<void>;
 };
 
-const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAY_ABBR = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+const CATEGORY_CHIPS = [
+  {label: 'Class',    cls: 'border-violet-100 bg-violet-50/80 text-violet-600 hover:bg-violet-100/70'},
+  {label: 'Work',     cls: 'border-sky-100 bg-sky-50/80 text-sky-600 hover:bg-sky-100/70'},
+  {label: 'Sport',    cls: 'border-emerald-100 bg-emerald-50/80 text-emerald-600 hover:bg-emerald-100/70'},
+  {label: 'Gym',      cls: 'border-amber-100 bg-amber-50/80 text-amber-600 hover:bg-amber-100/70'},
+  {label: 'Personal', cls: 'border-rose-100 bg-rose-50/80 text-rose-600 hover:bg-rose-100/70'},
+];
 
 function makeId() {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -41,12 +40,7 @@ function makeId() {
 }
 
 function createEmptySlot(): FormSlot {
-  return {
-    id: makeId(),
-    days: [],
-    startTime: '09:00',
-    endTime: '10:00',
-  };
+  return {id: makeId(), days: [], startTime: '09:00', endTime: '10:00'};
 }
 
 function toYmd(date: Date) {
@@ -58,339 +52,291 @@ function toYmd(date: Date) {
 
 function toColorCategory(title: string): RecurringColorCategory {
   const style = categorizeBlock(title);
-  if (style.text === '#4C3FB8') return 'study';
-  if (style.text === '#1D6D85') return 'work';
-  if (style.text === '#9A3412') return 'sport';
-  if (style.text === '#9D4893') return 'personal';
+  if (style.text === '#3730A3') return 'study';
+  if (style.text === '#0E7490') return 'work';
+  if (style.text === '#0369A1') return 'sport';
+  if (style.text === '#BE123C') return 'personal';
   return 'default';
 }
 
+function computeDuration(start: string, end: string): string | null {
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  const total = eh * 60 + em - (sh * 60 + sm);
+  if (total <= 0) return null;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (!h) return `${m}m`;
+  if (!m) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+const TIME_INPUT =
+  'flex-1 rounded-2xl border border-black/[0.06] bg-white/80 px-3 py-2.5 text-[13.5px] font-medium text-[#1e293b] outline-none transition-shadow focus:border-violet-200/60 focus:ring-2 focus:ring-violet-50/80';
+
+const DATE_INPUT =
+  'mt-1 w-full rounded-2xl border border-black/[0.06] bg-white/80 px-3.5 py-2.5 text-[13px] text-[#1e293b] outline-none transition-shadow focus:border-violet-200/60 focus:ring-2 focus:ring-violet-50/80';
+
 export default function ManualScheduleForm({onSave}: Props) {
   const [title, setTitle] = useState('');
+  const [titleFocused, setTitleFocused] = useState(false);
   const [slots, setSlots] = useState<FormSlot[]>([createEmptySlot()]);
-  const [entries, setEntries] = useState<DraftEntry[]>([]);
   const [startDate, setStartDate] = useState(() => toYmd(new Date()));
   const [endDate, setEndDate] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [slotErrors, setSlotErrors] = useState<Record<string, string>>({});
-  const [addedFeedback, setAddedFeedback] = useState<string | null>(null);
 
-  const validateForm = () => {
-    const nextErrors: Record<string, string> = {};
-    if (!title.trim()) {
-      return {
-        isValid: false,
-        titleError: 'Please fill in a title.',
-        slotErrors: nextErrors,
-      };
+  const toggleDay = (slotId: string, idx: number) => {
+    setSlots(prev =>
+      prev.map(s => {
+        if (s.id !== slotId) return s;
+        const active = s.days.includes(idx);
+        return {
+          ...s,
+          days: active ? s.days.filter(d => d !== idx) : [...s.days, idx].sort((a, b) => a - b),
+        };
+      }),
+    );
+  };
+
+  const buildEntries = () => {
+    const cat = toColorCategory(title);
+    const result: Array<{
+      title: string;
+      dayOfWeek: number;
+      startTime: string;
+      endTime: string;
+      colorCategory: RecurringColorCategory;
+    }> = [];
+    for (const slot of slots) {
+      for (const dayOfWeek of slot.days) {
+        result.push({title: title.trim(), dayOfWeek, startTime: slot.startTime, endTime: slot.endTime, colorCategory: cat});
+      }
     }
-    if (!slots.length) {
-      return {
-        isValid: false,
-        titleError: null,
-        slotErrors: {'__all__': 'Add at least one time slot.'},
-      };
+    return result;
+  };
+
+  const previewCount = useMemo(() => slots.reduce((sum, s) => sum + s.days.length, 0), [slots]);
+
+  const handleSave = async () => {
+    if (!title.trim()) {
+      setError('Please add a routine name.');
+      return;
     }
     for (const slot of slots) {
       if (slot.days.length === 0) {
-        nextErrors[slot.id] = 'Select at least one day for this slot.';
-        continue;
+        setError('Select at least one day for each time slot.');
+        return;
       }
-      if (!slot.startTime || !slot.endTime || slot.startTime >= slot.endTime) {
-        nextErrors[slot.id] = 'Start time must be before end time.';
-      }
-    }
-    return {
-      isValid: Object.keys(nextErrors).length === 0,
-      titleError: null,
-      slotErrors: nextErrors,
-    };
-  };
-
-  const buildEntriesFromCurrentForm = (): DraftEntry[] => {
-    const cat = toColorCategory(title);
-    const nextEntries: DraftEntry[] = [];
-    for (const slot of slots) {
-      for (const dayOfWeek of slot.days) {
-        nextEntries.push({
-          id: makeId(),
-          title: title.trim(),
-          dayOfWeek,
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-          colorCategory: cat,
-        });
+      if (slot.startTime >= slot.endTime) {
+        setError('Start time must be before end time in each slot.');
+        return;
       }
     }
-    return nextEntries;
-  };
-
-  const canAdd = useMemo(() => validateForm().isValid, [title, slots]);
-  const hasAnyFormInput = useMemo(
-    () =>
-      title.trim().length > 0 ||
-      slots.some(slot => slot.days.length > 0 || slot.startTime !== '09:00' || slot.endTime !== '10:00'),
-    [title, slots],
-  );
-  const canUseCurrentFormForSave = useMemo(() => validateForm().isValid, [title, slots]);
-  const pendingFormEventCount = canUseCurrentFormForSave ? buildEntriesFromCurrentForm().length : 0;
-  const totalEventCount = entries.length + pendingFormEventCount;
-
-  const addEntry = () => {
-    const validation = validateForm();
-    if (!validation.isValid) {
-      setError(validation.titleError ?? 'Please complete all slot details before adding.');
-      setSlotErrors(validation.slotErrors);
+    const entries = buildEntries();
+    if (!entries.length) {
+      setError('Select at least one day.');
       return;
     }
-    const nextEntries = buildEntriesFromCurrentForm();
-    setEntries(prev => [...prev, ...nextEntries]);
-    resetCurrentForm();
+    setSaving(true);
     setError(null);
-    setSlotErrors({});
-    setAddedFeedback(`✓ Added ${nextEntries.length} occurrence${nextEntries.length > 1 ? 's' : ''} to drafts`);
-    window.setTimeout(() => setAddedFeedback(null), 2200);
+    try {
+      await onSave(entries, {startDate, endDate: endDate || null});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to save.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const resetCurrentForm = () => {
-    setTitle('');
-    setSlots([createEmptySlot()]);
-  };
-
-  const getSaveLabel = () => {
-    if (totalEventCount <= 0) return 'Save';
-    if (totalEventCount === 1) return 'Save 1 event';
-    return `Save ${totalEventCount} events`;
-  };
-
-  const inputClass =
-    'mt-1 w-full rounded-lg border border-[#E5E7EB] bg-white px-3.5 py-2.5 text-sm text-[#111827] outline-none focus:border-[#60A5FA] focus:ring-4 focus:ring-[#DBEAFE]';
+  const showChips = titleFocused || !title.trim();
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-4">
-        <h3 className="text-sm font-semibold text-[#111827]">Add an event</h3>
-        <p className="mt-1 text-xs text-[#6B7280]">Create one event card, then add it to your draft list.</p>
+    <div className="space-y-6 pb-1">
 
-        <label className="mt-3 block text-xs font-medium text-[#4B5563]">
-          Event title
-          <input
-            className={inputClass}
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            placeholder="e.g., Math class, Soccer practice, Morning standup"
-          />
-        </label>
-
-        <div className="mt-4">
-          <p className="text-xs font-medium text-[#4B5563]">When does this happen?</p>
-          <div className="mt-2 space-y-3">
-            {slots.map((slot, slotIdx) => (
-              <div key={slot.id} className="rounded-xl border border-[#E5E7EB] bg-white p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-xs font-semibold text-[#374151]">Slot {slotIdx + 1}</p>
-                  {slots.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setSlots(prev => prev.filter(entry => entry.id !== slot.id))}
-                      className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2 py-1 text-[11px] text-red-700"
-                    >
-                      <Trash2 size={12} />
-                      Remove
-                    </button>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {DAY_LABELS.map((label, idx) => {
-                    const active = slot.days.includes(idx);
-                    return (
-                      <button
-                        key={`${slot.id}-${label}`}
-                        type="button"
-                        onClick={() =>
-                          setSlots(prev =>
-                            prev.map(entry =>
-                              entry.id !== slot.id
-                                ? entry
-                                : {
-                                    ...entry,
-                                    days: active
-                                      ? entry.days.filter(d => d !== idx)
-                                      : [...entry.days, idx].sort((a, b) => a - b),
-                                  },
-                            ),
-                          )
-                        }
-                        className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                          active
-                            ? 'border-[#3B82F6] bg-[#3B82F6] text-white'
-                            : 'border-[#E5E7EB] bg-white text-[#4B5563] hover:bg-[#F3F4F6]'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  <label className="text-xs font-medium text-[#4B5563]">
-                    Starts at
-                    <input
-                      className={inputClass}
-                      type="time"
-                      value={slot.startTime}
-                      onChange={e =>
-                        setSlots(prev => prev.map(entry => (entry.id === slot.id ? {...entry, startTime: e.target.value} : entry)))
-                      }
-                    />
-                  </label>
-                  <label className="text-xs font-medium text-[#4B5563]">
-                    Ends at
-                    <input
-                      className={inputClass}
-                      type="time"
-                      value={slot.endTime}
-                      onChange={e =>
-                        setSlots(prev => prev.map(entry => (entry.id === slot.id ? {...entry, endTime: e.target.value} : entry)))
-                      }
-                    />
-                  </label>
-                </div>
-                {slotErrors[slot.id] && <p className="mt-2 text-xs text-red-600">{slotErrors[slot.id]}</p>}
-              </div>
+      {/* ─── Routine name ─── */}
+      <div>
+        <input
+          className="w-full border-0 border-b-[1.5px] border-black/[0.08] bg-transparent pb-3 text-[17px] font-medium text-[#0F172A] outline-none placeholder:font-normal placeholder:text-[#CBD5E1] transition-colors focus:border-violet-300/60"
+          placeholder="e.g. Maths, Work shift, Swimming…"
+          value={title}
+          onChange={e => { setTitle(e.target.value); if (error) setError(null); }}
+          onFocus={() => setTitleFocused(true)}
+          onBlur={() => window.setTimeout(() => setTitleFocused(false), 160)}
+          autoFocus
+        />
+        {/* Category suggestion chips */}
+        <div
+          className="overflow-hidden transition-all duration-200"
+          style={{maxHeight: showChips ? '56px' : '0', opacity: showChips ? 1 : 0}}
+        >
+          <div className="flex flex-wrap gap-1.5 pt-3">
+            {CATEGORY_CHIPS.map(chip => (
+              <button
+                key={chip.label}
+                type="button"
+                onMouseDown={e => {
+                  e.preventDefault();
+                  setTitle(chip.label);
+                }}
+                className={`rounded-full border px-3 py-1 text-[12px] font-medium transition-all duration-150 active:scale-[0.96] ${chip.cls}`}
+              >
+                {chip.label}
+              </button>
             ))}
           </div>
         </div>
-
-        <button
-          type="button"
-          onClick={() => setSlots(prev => [...prev, createEmptySlot()])}
-          className="mt-3 inline-flex items-center gap-2 rounded-xl border border-dashed border-[#93C5FD] bg-white px-3 py-2 text-xs font-semibold text-[#1D4ED8]"
-        >
-          <Plus size={14} />
-          Add time slot
-        </button>
-
-        <button
-          type="button"
-          onClick={addEntry}
-          disabled={!canAdd}
-          className="mt-4 inline-flex items-center gap-2 rounded-xl border border-dashed border-[#93C5FD] bg-[#EFF6FF] px-3.5 py-2 text-xs font-semibold text-[#1D4ED8] transition hover:bg-[#DBEAFE] disabled:opacity-50"
-        >
-          <Plus size={14} />
-          Add this event to drafts
-        </button>
-        {addedFeedback && <p className="mt-2 text-xs text-emerald-700">{addedFeedback}</p>}
       </div>
 
-      <div className="space-y-2">
-        <p className="text-sm font-semibold text-[#111827]">Draft events</p>
-        {entries.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[#E5E7EB] bg-white px-4 py-3 text-xs text-[#6B7280]">
-            No events yet. Add one above to build your weekly schedule.
-          </div>
-        ) : (
-          Object.entries(
-            entries.reduce<Record<string, DraftEntry[]>>((acc, entry) => {
-              const key = entry.title.trim();
-              if (!acc[key]) acc[key] = [];
-              acc[key].push(entry);
-              return acc;
-            }, {}),
-          ).map(([groupTitle, groupEntries]) => (
-            <div key={groupTitle} className="rounded-xl border border-[#E5E7EB] bg-white p-3">
+      {/* ─── Time slots ─── */}
+      <div className="space-y-3">
+        {slots.map((slot, i) => {
+          const dur = computeDuration(slot.startTime, slot.endTime);
+          return (
+            <div
+              key={slot.id}
+              className="space-y-4 rounded-2xl bg-black/[0.02] p-4"
+              style={i > 0 ? {animation: 'slotIn 220ms cubic-bezier(0.22,1,0.36,1)'} : undefined}
+            >
+              {/* Slot header */}
               <div className="flex items-center justify-between">
-                <div className="text-sm font-medium text-[#111827]">
-                  {groupTitle} ({groupEntries.length} occurrence{groupEntries.length > 1 ? 's' : ''})
-                </div>
-                <button
-                  type="button"
-                  className="rounded-md border border-red-200 px-2 py-1 text-[11px] text-red-700"
-                  onClick={() => setEntries(prev => prev.filter(item => item.title.trim() !== groupTitle))}
-                >
-                  Remove all
-                </button>
+                <p className="text-[10.5px] font-semibold uppercase tracking-widest text-[#B8BFC9]">
+                  {i === 0 ? 'Repeat on' : 'Also on'}
+                </p>
+                {i > 0 && (
+                  <button
+                    type="button"
+                    className="text-[11.5px] text-[#B8BFC9] transition hover:text-rose-500"
+                    onClick={() => setSlots(prev => prev.filter(s => s.id !== slot.id))}
+                  >
+                    Remove
+                  </button>
+                )}
               </div>
-              <div className="mt-2 space-y-1">
-                {groupEntries.map(entry => (
-                  <div key={entry.id} className="flex items-center justify-between rounded-lg bg-[#F9FAFB] px-2 py-1.5 text-xs text-[#6B7280]">
-                    <span>
-                      {DAY_LABELS[entry.dayOfWeek]} {entry.startTime} - {entry.endTime}
-                    </span>
+
+              {/* Day pills */}
+              <div className="flex flex-wrap gap-1.5">
+                {DAY_ABBR.map((label, idx) => {
+                  const active = slot.days.includes(idx);
+                  return (
                     <button
+                      key={label}
                       type="button"
-                      className="text-red-600"
-                      onClick={() => setEntries(prev => prev.filter(item => item.id !== entry.id))}
+                      onClick={() => toggleDay(slot.id, idx)}
+                      className={`flex h-9 w-9 items-center justify-center rounded-full text-[12px] font-medium transition-all duration-150 active:scale-[0.95] ${
+                        active
+                          ? 'border border-violet-500/80 bg-violet-600/90 text-white shadow-[0_2px_10px_rgba(124,58,237,0.28)]'
+                          : 'border border-black/[0.08] bg-white/80 text-[#6B7280] hover:border-violet-200/70 hover:bg-violet-50/50 hover:text-violet-600'
+                      }`}
                     >
-                      Remove
+                      {label}
                     </button>
-                  </div>
-                ))}
+                  );
+                })}
+              </div>
+
+              {/* Time row */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="time"
+                  className={TIME_INPUT}
+                  value={slot.startTime}
+                  onChange={e =>
+                    setSlots(prev =>
+                      prev.map(s => (s.id === slot.id ? {...s, startTime: e.target.value} : s)),
+                    )
+                  }
+                />
+                <div className="shrink-0 text-[#D1D5DB]">
+                  <svg width="14" height="8" viewBox="0 0 14 8" fill="none" aria-hidden="true">
+                    <path d="M1 4h12M9.5 1l3 3-3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <input
+                  type="time"
+                  className={TIME_INPUT}
+                  value={slot.endTime}
+                  onChange={e =>
+                    setSlots(prev =>
+                      prev.map(s => (s.id === slot.id ? {...s, endTime: e.target.value} : s)),
+                    )
+                  }
+                />
+                {/* Duration badge */}
+                <div
+                  className="overflow-hidden transition-all duration-200"
+                  style={{maxWidth: dur ? '72px' : '0', opacity: dur ? 1 : 0}}
+                >
+                  <span className="block whitespace-nowrap rounded-full border border-violet-100/80 bg-violet-50/70 px-2.5 py-1 text-[11px] font-medium text-violet-500">
+                    {dur}
+                  </span>
+                </div>
               </div>
             </div>
-          ))
-        )}
+          );
+        })}
       </div>
 
-      <div className="rounded-2xl border border-[#E5E7EB] bg-[#F9FAFB] p-4">
-        <h3 className="text-sm font-semibold text-[#111827]">When does this schedule apply?</h3>
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
-          <label className="text-xs font-medium text-[#4B5563]">
-            Start date
-            <input className={inputClass} type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+      {/* Add time slot — dashed pill button */}
+      <button
+        type="button"
+        onClick={() => setSlots(prev => [...prev, createEmptySlot()])}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-black/[0.08] py-3 text-[13px] text-[#B8BFC9] transition-all hover:border-violet-200/70 hover:bg-violet-50/20 hover:text-violet-500"
+      >
+        <Plus size={14} strokeWidth={2} />
+        Add another time slot
+      </button>
+
+      <div className="border-t border-black/[0.04]" />
+
+      {/* ─── Active period ─── */}
+      <div className="space-y-3 rounded-2xl bg-black/[0.02] px-4 py-4">
+        <p className="text-[10.5px] font-semibold uppercase tracking-widest text-[#B8BFC9]">Active period</p>
+        <div className="flex flex-wrap gap-3">
+          <label className="block min-w-[120px] flex-1">
+            <span className="text-[11px] text-[#C4C9D4]">From</span>
+            <input
+              type="date"
+              className={DATE_INPUT}
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+            />
           </label>
-          <label className="text-xs font-medium text-[#4B5563]">
-            End date (optional)
-            <input className={inputClass} type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          <label className="block min-w-[120px] flex-1">
+            <span className="text-[11px] text-[#C4C9D4]">
+              Until{' '}
+              <span className="text-[#D9DCE2]">optional</span>
+            </span>
+            <input
+              type="date"
+              className={DATE_INPUT}
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
+            />
           </label>
         </div>
+        <p className="text-[11px] text-[#D4D8E1]">Leave Until blank for an indefinite routine.</p>
       </div>
 
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
-      {entries.length === 0 && !hasAnyFormInput && (
-        <p className="text-xs text-[#6B7280]">Add at least one event to save</p>
+      {/* Error */}
+      {error && (
+        <p className="rounded-2xl bg-rose-50/80 px-3.5 py-2.5 text-[12px] text-rose-600">{error}</p>
       )}
 
-      <div className="flex justify-end">
+      {/* ─── Footer CTA ─── */}
+      <div className="flex items-center justify-between pt-1">
+        <span className="text-[12px] text-[#C4C9D4]">
+          {previewCount > 0
+            ? `${previewCount} occurrence${previewCount > 1 ? 's' : ''} per week`
+            : 'Select days above to continue'}
+        </span>
         <button
           type="button"
-          disabled={saving || (entries.length === 0 && !hasAnyFormInput)}
-          className="rounded-xl bg-[#3B82F6] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#2563EB] disabled:opacity-60"
-          onClick={async () => {
-            if (entries.length === 0 && !hasAnyFormInput) return;
-
-            if (hasAnyFormInput && !canUseCurrentFormForSave) {
-              const validation = validateForm();
-              setSlotErrors(validation.slotErrors);
-              setError(validation.titleError ?? 'Please fill in title and complete each time slot.');
-              return;
-            }
-
-            const payloadEntries: DraftEntry[] = [...entries];
-            if (canUseCurrentFormForSave) {
-              payloadEntries.push(...buildEntriesFromCurrentForm());
-            }
-
-            if (payloadEntries.length === 0) {
-              setError('Add at least one valid event before saving.');
-              return;
-            }
-
-            setSaving(true);
-            setError(null);
-            try {
-              await onSave(payloadEntries, {startDate, endDate: endDate || null});
-              setEntries([]);
-              resetCurrentForm();
-            } catch (err) {
-              setError(err instanceof Error ? err.message : 'Unable to save recurring schedule.');
-            } finally {
-              setSaving(false);
-            }
-          }}
+          disabled={saving}
+          className="rounded-2xl bg-[#111827] px-5 py-2.5 text-[13px] font-semibold text-white shadow-[0_2px_12px_rgba(0,0,0,0.16)] transition hover:bg-[#1f2937] hover:shadow-[0_4px_18px_rgba(0,0,0,0.2)] active:scale-[0.98] disabled:opacity-50"
+          onClick={handleSave}
         >
-          {saving ? 'Saving...' : getSaveLabel()}
+          {saving ? 'Saving…' : 'Save routine'}
         </button>
       </div>
     </div>

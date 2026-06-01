@@ -27,6 +27,7 @@ export type RecurringScheduleException = {
   modifiedStartTime: string | null;
   modifiedEndTime: string | null;
   modifiedTitle: string | null;
+  modifiedDate: string | null;
   createdAt: string;
 };
 

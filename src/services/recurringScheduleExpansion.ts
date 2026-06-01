@@ -48,6 +48,7 @@ export function applyExceptions(
   const nextEnd = exception.modifiedEndTime ? parseTimeToMinutes(exception.modifiedEndTime) : occurrence.endTime;
   return {
     ...occurrence,
+    date: exception.modifiedDate ?? occurrence.date,
     title: exception.modifiedTitle ?? occurrence.title,
     startTime: nextStart,
     endTime: nextEnd,

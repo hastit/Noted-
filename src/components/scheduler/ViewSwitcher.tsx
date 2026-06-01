@@ -11,16 +11,16 @@ type Props<T extends string> = {
 
 export default function ViewSwitcher<T extends string>({value, options, onChange}: Props<T>) {
   return (
-    <div className="inline-flex rounded-full border border-[#E5E7EB] bg-white p-1">
+    <div className="inline-flex rounded-full border border-black/[0.08] bg-white/60 p-1 backdrop-blur-sm">
       {options.map(option => (
         <button
           key={option.id}
           type="button"
           onClick={() => onChange(option.id)}
-          className={`rounded-full px-4 py-1.5 text-xs font-medium transition-all duration-100 ${
+          className={`rounded-full px-4 py-1.5 text-xs font-medium transition-all duration-150 ${
             value === option.id
-              ? 'bg-white text-[#111827] shadow-[0_1px_2px_rgba(0,0,0,0.08)]'
-              : 'text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#111827]'
+              ? 'bg-white text-[#111827] shadow-[0_1px_4px_rgba(0,0,0,0.1)]'
+              : 'text-[#9CA3AF] hover:bg-white/70 hover:text-[#374151]'
           }`}
         >
           {option.label}

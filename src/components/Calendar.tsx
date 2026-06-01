@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
-import {AlertCircle, Lightbulb, Sparkles} from 'lucide-react';
+import {AlertCircle, ChevronDown, Clock3, Lightbulb, PencilLine, Plus, RefreshCw, Save, Sparkles, Trash2, X} from 'lucide-react';
 import type {CalendarEvent, Tag, Task} from '../types';
-import type {ScheduledBlock} from '../types/scheduler';
+import type {AIPlanResponse, ScheduledBlock} from '../types/scheduler';
 import {requestAiSchedule} from '../services/aiSchedulerClient';
 import {
   consumeAiRequest,
@@ -40,8 +40,9 @@ import {
 import {expandRecurringBlocksForRange} from '../services/recurringScheduleExpansion';
 import CalendarView from './scheduler/CalendarView';
 import CalendarEmptyState from './scheduler/CalendarEmptyState';
+import QuickAddModal from './scheduler/QuickAddModal';
+import type {QuickAddSaveData} from './scheduler/QuickAddModal';
 import QuickSuggestions from './scheduler/QuickSuggestions';
-import RecurringScheduleCard from './scheduler/RecurringScheduleCard';
 import ScheduleDayGroup from './scheduler/ScheduleDayGroup';
 import TodayAtAGlance from './scheduler/TodayAtAGlance.tsx';
 import ViewSwitcher from './scheduler/ViewSwitcher.tsx';
@@ -55,6 +56,283 @@ interface CalendarProps {
   onEventsChange: (events: CalendarEvent[]) => void;
   onTagsChange: (tags: Tag[]) => void;
   tasks?: Task[];
+}
+
+type DraftUnderstandingItem = {
+  id: string;
+  title: string;
+  deadline: string;
+  estimatedMinutes: number;
+  suggestedSessions: number;
+};
+
+type DraftPlanBlock = {
+  id: string;
+  title: string;
+  durationMinutes: number;
+  date: string;
+  startTime: number;
+  endTime: number;
+  source: 'ai' | 'manual';
+  reasoning?: string;
+};
+
+type DraftPlan = {
+  source: 'ai' | 'mock';
+  reasoning: string;
+  understoodItems: DraftUnderstandingItem[];
+  proposedBlocks: DraftPlanBlock[];
+};
+
+function buildPlanningPreferences(options: {splitBigWork: boolean; avoidLateNightStudy: boolean}) {
+  const notes: string[] = [];
+  if (options.splitBigWork) {
+    notes.push('Split larger assignments into smaller focused sessions when it helps.');
+  }
+  if (options.avoidLateNightStudy) {
+    notes.push('Avoid late-night study sessions when possible and prefer daytime or early-evening work blocks.');
+  }
+  return notes;
+}
+
+function normalizeDraftKey(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function createDraftId(prefix: string) {
+  return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function toYmd(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function isIsoDate(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function formatDeadlineLabel(value: string) {
+  if (!isIsoDate(value)) return value;
+  const date = new Date(`${value}T12:00:00`);
+  return date.toLocaleDateString(undefined, {weekday: 'long'});
+}
+
+function formatBlockDateLabel(value: string) {
+  if (!isIsoDate(value)) return value || 'No date';
+  const date = new Date(`${value}T12:00:00`);
+  return date.toLocaleDateString(undefined, {weekday: 'long', month: 'short', day: 'numeric'});
+}
+
+function formatTimeLabel(minutesFromMidnight: number) {
+  const hours = Math.floor(minutesFromMidnight / 60);
+  const minutes = String(minutesFromMidnight % 60).padStart(2, '0');
+  return `${String(hours).padStart(2, '0')}:${minutes}`;
+}
+
+function parseTimeLabel(value: string) {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function formatDurationLabel(durationMinutes: number) {
+  if (durationMinutes >= 60) {
+    const hours = Math.floor(durationMinutes / 60);
+    const minutes = durationMinutes % 60;
+    if (minutes === 0) return `${hours}h`;
+    return `${hours}h${minutes}`;
+  }
+  return `${durationMinutes}m`;
+}
+
+function getLatestScheduledDate(items: ScheduledBlock[]) {
+  return items.reduce<string | null>((acc, item) => {
+    if (!acc) return item.date;
+    return item.date > acc ? item.date : acc;
+  }, null);
+}
+
+function normalizeDraftBlock(block: DraftPlanBlock): DraftPlanBlock {
+  const startTime = Math.max(0, Math.min(23 * 60 + 45, block.startTime));
+  const endTime = Math.max(startTime + 15, Math.min(24 * 60, block.endTime));
+  return {
+    ...block,
+    startTime,
+    endTime,
+    durationMinutes: endTime - startTime,
+  };
+}
+
+function createDraftBlock(block: ScheduledBlock, source: 'ai' | 'manual' = 'ai'): DraftPlanBlock {
+  return normalizeDraftBlock({
+    id: block.id,
+    title: block.title,
+    durationMinutes: block.durationMinutes,
+    date: block.date,
+    startTime: block.startTime,
+    endTime: block.endTime,
+    source,
+    reasoning: block.reasoning,
+  });
+}
+
+function cloneDraftPlan(plan: DraftPlan): DraftPlan {
+  return {
+    ...plan,
+    understoodItems: plan.understoodItems.map(item => ({...item})),
+    proposedBlocks: plan.proposedBlocks.map(block => ({...block})),
+  };
+}
+
+function createNewDraftTask(existing: DraftUnderstandingItem[], existingBlocks: DraftPlanBlock[]): DraftUnderstandingItem {
+  const fallbackDate = existingBlocks[0]?.date ?? toYmd(new Date());
+  return {
+    id: createDraftId('draft-task'),
+    title: `New task ${existing.length + 1}`,
+    deadline: fallbackDate,
+    estimatedMinutes: 60,
+    suggestedSessions: 1,
+  };
+}
+
+function createNewDraftSession(existingBlocks: DraftPlanBlock[]): DraftPlanBlock {
+  const today = toYmd(new Date());
+  const nextDate = existingBlocks.reduce<string>((acc, block) => (block.date > acc ? block.date : acc), today);
+  return {
+    id: createDraftId('draft-block'),
+    title: 'New study session',
+    date: nextDate,
+    startTime: 18 * 60,
+    endTime: 18 * 60 + 30,
+    durationMinutes: 30,
+    source: 'manual',
+  };
+}
+
+function toScheduledBlock(block: DraftPlanBlock, reasoning: string): ScheduledBlock {
+  const normalized = normalizeDraftBlock(block);
+  return {
+    id: normalized.id,
+    title: normalized.title.trim() || 'Untitled session',
+    durationMinutes: normalized.durationMinutes,
+    date: normalized.date,
+    startTime: normalized.startTime,
+    endTime: normalized.endTime,
+    reasoning,
+    source: 'ai',
+  };
+}
+
+function buildDraftPlan(plan: AIPlanResponse, proposedBlocks: ScheduledBlock[]): DraftPlan {
+  const sessionsByTitle = proposedBlocks.reduce<Map<string, number>>((acc, block) => {
+    const key = normalizeDraftKey(block.title);
+    acc.set(key, (acc.get(key) ?? 0) + 1);
+    return acc;
+  }, new Map());
+
+  const grouped = new Map<string, DraftUnderstandingItem>();
+  for (const subtask of plan.subtasks) {
+    const key = normalizeDraftKey(subtask.title);
+    const deadline = subtask.suggested_day ?? plan.deadline;
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.estimatedMinutes += subtask.estimated_minutes;
+      if (isIsoDate(existing.deadline) && isIsoDate(deadline) && deadline < existing.deadline) {
+        existing.deadline = deadline;
+      }
+      continue;
+    }
+    grouped.set(key, {
+      id: key,
+      title: subtask.title,
+      deadline,
+      estimatedMinutes: subtask.estimated_minutes,
+      suggestedSessions: sessionsByTitle.get(key) ?? 1,
+    });
+  }
+
+  return {
+    source: 'ai',
+    reasoning: plan.reasoning,
+    understoodItems: Array.from(grouped.values()),
+    proposedBlocks: proposedBlocks
+      .map(block => createDraftBlock(block, 'ai'))
+      .sort((a, b) => (a.date === b.date ? a.startTime - b.startTime : a.date.localeCompare(b.date))),
+  };
+}
+
+function buildMockDraftPlan(): DraftPlan {
+  const today = new Date();
+  const addDays = (count: number) => {
+    const next = new Date(today);
+    next.setDate(today.getDate() + count);
+    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+  };
+
+  return {
+    source: 'mock',
+    reasoning: 'I drafted a balanced preview with shorter writing sessions first, then revision sessions closer to the deadlines.',
+    understoodItems: [
+      {
+        id: 'chemistry-test',
+        title: 'Chemistry test',
+        deadline: addDays(4),
+        estimatedMinutes: 240,
+        suggestedSessions: 3,
+      },
+      {
+        id: 'essay',
+        title: 'Essay',
+        deadline: addDays(2),
+        estimatedMinutes: 180,
+        suggestedSessions: 2,
+      },
+    ],
+    proposedBlocks: [
+      {
+        id: 'ai-mock-essay-writing',
+        title: 'Essay writing',
+        durationMinutes: 90,
+        date: addDays(1),
+        startTime: 17 * 60,
+        endTime: 18 * 60 + 30,
+        source: 'ai',
+      },
+      {
+        id: 'ai-mock-essay-review',
+        title: 'Essay final review',
+        durationMinutes: 60,
+        date: addDays(2),
+        startTime: 10 * 60,
+        endTime: 11 * 60,
+        source: 'ai',
+      },
+      {
+        id: 'ai-mock-chemistry-revision',
+        title: 'Chemistry revision',
+        durationMinutes: 90,
+        date: addDays(3),
+        startTime: 16 * 60,
+        endTime: 17 * 60 + 30,
+        source: 'ai',
+      },
+      {
+        id: 'ai-mock-chemistry-review',
+        title: 'Quick chemistry review',
+        durationMinutes: 60,
+        date: addDays(4),
+        startTime: 9 * 60,
+        endTime: 10 * 60,
+        source: 'ai',
+      },
+    ],
+  };
 }
 
 export default function Calendar({events, tasks = []}: CalendarProps) {
@@ -72,15 +350,22 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
   const [loadingSavedBlocks, setLoadingSavedBlocks] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [reasoning, setReasoning] = useState('');
   const [latestDeadline, setLatestDeadline] = useState<string | null>(null);
   const [items, setItems] = useState<ScheduledBlock[]>([]);
+  const [draftPlan, setDraftPlan] = useState<DraftPlan | null>(null);
+  const [isEditingDraft, setIsEditingDraft] = useState(false);
+  const [draftBackupBeforeEdit, setDraftBackupBeforeEdit] = useState<DraftPlan | null>(null);
   const [includeDatedTasks, setIncludeDatedTasks] = useState(true);
+  const [splitBigWork, setSplitBigWork] = useState(true);
+  const [avoidLateNightStudy, setAvoidLateNightStudy] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>(initialView);
+  const [showOptions, setShowOptions] = useState(false);
   const [remaining, setRemaining] = useState(() => getRemainingAiRequests());
   const [recurringBlocks, setRecurringBlocks] = useState<RecurringScheduleBlock[]>([]);
   const [recurringExceptions, setRecurringExceptions] = useState<RecurringScheduleException[]>([]);
   const [showMySchedule, setShowMySchedule] = useState(false);
+  const [myScheduleInitialChoice, setMyScheduleInitialChoice] = useState<'recurring' | 'onetime' | 'import' | null>(null);
+  const [quickAddMode, setQuickAddMode] = useState<'task' | 'event' | null>(null);
   const [scheduleImports, setScheduleImports] = useState<ScheduleImport[]>([]);
   const [subjectColors, setSubjectColors] = useState<SubjectColor[]>([]);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
@@ -204,7 +489,6 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
     remaining > 0
       ? `✨ ${remaining} generations left today`
       : 'Quota refills tomorrow — try again then';
-  const promptLength = prompt.trim().length;
 
   const runGeneration = async () => {
     if (generationInFlightRef.current) return;
@@ -219,16 +503,25 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
     consumeAiRequest();
     setRemaining(getRemainingAiRequests());
     setLoading(true);
+    setIsEditingDraft(false);
+    setDraftBackupBeforeEdit(null);
     try {
+      const planningPreferences = buildPlanningPreferences({splitBigWork, avoidLateNightStudy});
+      const userText =
+        planningPreferences.length > 0
+          ? `${prompt.trim()}\n\nPlanning preferences:\n- ${planningPreferences.join('\n- ')}`
+          : prompt.trim();
       const plan = await requestAiSchedule({
-        userText: prompt.trim(),
+        userText,
         existingEvents: events.map(e => ({
           title: e.title,
           date: e.date,
           startTime: e.startTime,
           endTime: e.endTime,
         })),
-        datedTasks: getDatedTasks(tasks).map(t => ({title: t.title, dueDate: t.dueDate, status: t.status})),
+        datedTasks: includeDatedTasks
+          ? getDatedTasks(tasks).map(t => ({title: t.title, dueDate: t.dueDate, status: t.status}))
+          : [],
       });
       const blocks = buildScheduleFromAiPlan({
         subtasks: plan.subtasks,
@@ -245,37 +538,152 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
         source: 'ai',
         reasoning: plan.reasoning,
       }));
-
-      setReasoning(plan.reasoning);
-      setLatestDeadline(plan.deadline);
-
-      const existingItems = items;
-      const replaceExisting =
-        existingItems.length > 0 &&
-        window.confirm(
-          'You already have scheduled blocks.\n\nPress OK to Replace them, or Cancel to Add the new ones.',
-        );
-
-      const optimistic = replaceExisting ? aiBlocks : [...existingItems, ...aiBlocks];
-      setItems(optimistic);
-
-      setSaving(true);
-      try {
-        if (replaceExisting) await deleteAllBlocks();
-        const savedBatch = await createBlocks(aiBlocks);
-        setItems(replaceExisting ? savedBatch : [...existingItems, ...savedBatch]);
-      } catch {
-        setToast("Schedule generated, but couldn't save to cloud.");
-      } finally {
-        setSaving(false);
-      }
+      setDraftPlan(buildDraftPlan(plan, aiBlocks));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'AI could not generate a schedule right now. Please adjust your prompt and retry.');
+      setDraftPlan(buildMockDraftPlan());
+      setToast(e instanceof Error ? `${e.message} Showing a sample draft preview instead.` : 'Showing a sample draft preview instead.');
+      setError(null);
     } finally {
       setLoading(false);
       void syncServerQuota();
       generationInFlightRef.current = false;
     }
+  };
+
+  const saveDraftToCalendar = async () => {
+    if (!draftPlan || draftPlan.proposedBlocks.length === 0) return;
+    const existingItems = items;
+    const replaceExisting =
+      existingItems.length > 0 &&
+      window.confirm(
+        'You already have scheduled blocks.\n\nPress OK to Replace them, or Cancel to Add the new ones.',
+      );
+
+    setSaving(true);
+    setError(null);
+    try {
+      if (replaceExisting) await deleteAllBlocks();
+      const savedBatch = await createBlocks(draftPlan.proposedBlocks.map(block => toScheduledBlock(block, draftPlan.reasoning)));
+      const nextItems = replaceExisting ? savedBatch : [...existingItems, ...savedBatch];
+      setItems(nextItems);
+      setLatestDeadline(getLatestScheduledDate(nextItems));
+      setDraftPlan(null);
+      setIsEditingDraft(false);
+      setDraftBackupBeforeEdit(null);
+      setToast('Draft saved to calendar.');
+    } catch {
+      setToast("Couldn't save this draft to the calendar.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startEditingDraft = () => {
+    if (!draftPlan || isEditingDraft) return;
+    setDraftBackupBeforeEdit(cloneDraftPlan(draftPlan));
+    setIsEditingDraft(true);
+  };
+
+  const saveDraftChanges = () => {
+    setIsEditingDraft(false);
+    setDraftBackupBeforeEdit(null);
+  };
+
+  const cancelDraftChanges = () => {
+    if (draftBackupBeforeEdit) {
+      setDraftPlan(cloneDraftPlan(draftBackupBeforeEdit));
+    }
+    setIsEditingDraft(false);
+    setDraftBackupBeforeEdit(null);
+  };
+
+  const updateDraftTask = (id: string, patch: Partial<DraftUnderstandingItem>) => {
+    setDraftPlan(prev =>
+      prev
+        ? {
+            ...prev,
+            understoodItems: prev.understoodItems.map(item => (item.id === id ? {...item, ...patch} : item)),
+          }
+        : prev,
+    );
+  };
+
+  const removeDraftTask = (id: string) => {
+    setDraftPlan(prev =>
+      prev
+        ? {
+            ...prev,
+            understoodItems: prev.understoodItems.filter(item => item.id !== id),
+          }
+        : prev,
+    );
+  };
+
+  const addDraftTask = () => {
+    setDraftPlan(prev =>
+      prev
+        ? {
+            ...prev,
+            understoodItems: [...prev.understoodItems, createNewDraftTask(prev.understoodItems, prev.proposedBlocks)],
+          }
+        : prev,
+    );
+  };
+
+  const updateDraftBlock = (id: string, updater: (block: DraftPlanBlock) => DraftPlanBlock) => {
+    setDraftPlan(prev =>
+      prev
+        ? {
+            ...prev,
+            proposedBlocks: prev.proposedBlocks.map(block => (block.id === id ? normalizeDraftBlock(updater(block)) : block)),
+          }
+        : prev,
+    );
+  };
+
+  const updateDraftBlockText = (id: string, patch: Partial<Pick<DraftPlanBlock, 'title' | 'date'>>) => {
+    updateDraftBlock(id, block => ({...block, ...patch}));
+  };
+
+  const updateDraftBlockStartTime = (id: string, value: string) => {
+    const parsed = parseTimeLabel(value);
+    if (parsed === null) return;
+    updateDraftBlock(id, block => ({
+      ...block,
+      startTime: parsed,
+      endTime: parsed + Math.max(15, block.durationMinutes),
+    }));
+  };
+
+  const updateDraftBlockEndTime = (id: string, value: string) => {
+    const parsed = parseTimeLabel(value);
+    if (parsed === null) return;
+    updateDraftBlock(id, block => ({
+      ...block,
+      endTime: parsed,
+    }));
+  };
+
+  const removeDraftBlock = (id: string) => {
+    setDraftPlan(prev =>
+      prev
+        ? {
+            ...prev,
+            proposedBlocks: prev.proposedBlocks.filter(block => block.id !== id),
+          }
+        : prev,
+    );
+  };
+
+  const addDraftBlock = () => {
+    setDraftPlan(prev =>
+      prev
+        ? {
+            ...prev,
+            proposedBlocks: [...prev.proposedBlocks, createNewDraftSession(prev.proposedBlocks)],
+          }
+        : prev,
+    );
   };
 
   const updateItem = (id: string, patch: Partial<ScheduledBlock>) => {
@@ -313,152 +721,585 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
     });
   };
 
-  return (
-    <div
-      className={`relative h-full min-h-0 overflow-y-auto px-4 pb-8 pt-4 md:px-8 md:pb-10 md:pt-6 ${loading ? 'ai-thinking-surface' : ''}`}
-    >
-      <style>{`
-        .ai-page-mesh::before,
-        .ai-page-mesh::after { content:''; position:absolute; border-radius:9999px; filter:blur(72px); pointer-events:none; }
-        .ai-page-mesh::before { width:22rem; height:22rem; left:-6rem; top:-8rem; background:rgba(240,244,255,0.32); }
-        .ai-page-mesh::after { width:24rem; height:24rem; right:-7rem; bottom:2rem; background:rgba(254,243,242,0.22); }
-        .ai-glow-center { position:absolute; inset:12% 22% auto; height:22rem; border-radius:9999px; background:rgba(250,250,250,0.7); filter:blur(80px); pointer-events:none; }
-        .ai-thinking-surface .ai-page-mesh::before,
-        .ai-thinking-surface .ai-page-mesh::after { animation: aiBlobShift 2.8s ease-in-out infinite alternate; }
-        .sparkle-breathe { animation: sparklePulse 4.8s ease-in-out infinite; }
-        .thinking-ring { animation: thinkingRing 1.5s ease-in-out infinite; }
-        .thinking-dot { animation: driftDot 2.8s ease-in-out infinite; }
-        @keyframes aiBlobShift { 0% { transform: translate3d(0,0,0);} 100% { transform: translate3d(10px,-6px,0);} }
-        @keyframes sparklePulse { 0%,100% { transform: scale(1); opacity:.9;} 50% { transform: scale(1.08); opacity:1;} }
-        @keyframes thinkingRing { 0%,100% { box-shadow: 0 0 0 0 rgba(99,102,241,.05), 0 0 0 0 rgba(147,197,253,.05);} 50% { box-shadow: 0 0 0 1px rgba(99,102,241,.28), 0 0 0 8px rgba(147,197,253,.14);} }
-        @keyframes driftDot { 0%,100% { transform: translateY(0px); opacity:.3;} 50% { transform: translateY(-8px); opacity:.8;} }
-        @media (prefers-reduced-motion: reduce) {
-          .ai-thinking-surface .ai-page-mesh::before,
-          .ai-thinking-surface .ai-page-mesh::after,
-          .sparkle-breathe,
-          .thinking-ring,
-          .thinking-dot { animation: none !important; }
+  // Map of undoId → async undo function, kept in a ref so it never triggers re-renders.
+  const recurringUndoActionsRef = useRef<Map<string, () => Promise<void>>>(new Map());
+
+  const handleCommitRecurringDrop = async (block: ScheduledBlock, preview: {dayKey: string; startTime: number; endTime: number}): Promise<{undoId: string}> => {
+    const parts = block.id.split('__');
+    if (parts.length !== 3 || parts[0] !== 'rec') throw new Error('Invalid recurring block ID');
+    const [, recurringBlockId, originalDate] = parts;
+
+    const toHHMM = (min: number) =>
+      `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+
+    const previousException = recurringExceptions.find(
+      ex => ex.recurringBlockId === recurringBlockId && ex.exceptionDate === originalDate,
+    ) ?? null;
+
+    // Build a client-side exception for immediate optimistic rendering.
+    // This ID is temporary; it gets replaced by the real DB id once persisted.
+    const clientId = `opt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimistic: RecurringScheduleException = {
+      id: clientId,
+      userId: '',
+      recurringBlockId,
+      exceptionDate: originalDate,
+      type: 'modify',
+      modifiedStartTime: toHHMM(preview.startTime),
+      modifiedEndTime: toHHMM(preview.endTime),
+      modifiedTitle: null,
+      modifiedDate: preview.dayKey !== originalDate ? preview.dayKey : null,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Apply optimistic update immediately so the calendar re-renders now.
+    setRecurringExceptions(prev => [
+      ...prev.filter(ex => !(ex.recurringBlockId === recurringBlockId && ex.exceptionDate === originalDate)),
+      optimistic,
+    ]);
+
+    // Track real DB id once persisted (captured by undo closure below).
+    let persistedId: string | null = null;
+
+    // Register undo against the client id — works whether DB succeeded or not.
+    recurringUndoActionsRef.current.set(clientId, async () => {
+      setRecurringExceptions(prev => {
+        const without = prev.filter(ex =>
+          ex.id !== clientId && (persistedId === null || ex.id !== persistedId),
+        );
+        return previousException ? [...without, previousException] : without;
+      });
+      if (persistedId) {
+        await deleteException(persistedId).catch(e => console.warn('[RECURRING UNDO] delete failed:', e));
+        if (previousException) {
+          await createException({
+            recurringBlockId: previousException.recurringBlockId,
+            exceptionDate: previousException.exceptionDate,
+            type: previousException.type,
+            modifiedDate: previousException.modifiedDate ?? undefined,
+            modifiedStartTime: previousException.modifiedStartTime ?? undefined,
+            modifiedEndTime: previousException.modifiedEndTime ?? undefined,
+            modifiedTitle: previousException.modifiedTitle ?? undefined,
+          }).catch(e => console.warn('[RECURRING UNDO] re-create failed:', e));
         }
-      `}</style>
-      <div className="ai-page-mesh pointer-events-none absolute inset-0" />
-      <div className="ai-glow-center" />
+        await refreshRecurringData().catch(e => console.warn('[RECURRING UNDO] refresh failed:', e));
+      }
+    });
+
+    // Persist to DB in the background — errors are logged but do not block the UI.
+    void (async () => {
+      try {
+        if (previousException) await deleteException(previousException.id);
+        const saved = await createException({
+          recurringBlockId,
+          exceptionDate: originalDate,
+          type: 'modify',
+          modifiedDate: preview.dayKey !== originalDate ? preview.dayKey : undefined,
+          modifiedStartTime: toHHMM(preview.startTime),
+          modifiedEndTime: toHHMM(preview.endTime),
+        });
+        persistedId = saved.id;
+        // Replace the optimistic record with the real one so IDs are consistent.
+        setRecurringExceptions(prev => [
+          ...prev.filter(ex => ex.id !== clientId && !(ex.recurringBlockId === recurringBlockId && ex.exceptionDate === originalDate)),
+          saved,
+        ]);
+      } catch (err) {
+        console.error(
+          '[RECURRING OVERRIDE] DB persist failed — move is visible for this session only.',
+          '\nRun migration 20260601120000_add_modified_date_to_exceptions.sql in Supabase for full persistence.',
+          err,
+        );
+        // Optimistic state stays: the move is visible in the current session.
+      }
+    })();
+
+    return {undoId: clientId};
+  };
+
+  const handleUndoRecurringDrop = async (undoId: string) => {
+    const action = recurringUndoActionsRef.current.get(undoId);
+    if (!action) return;
+    recurringUndoActionsRef.current.delete(undoId);
+    await action();
+  };
+
+  const handleQuickAdd = (type: 'task' | 'event' | 'routine' | 'import') => {
+    if (type === 'task' || type === 'event') {
+      setQuickAddMode(type);
+    } else if (type === 'routine') {
+      setMyScheduleInitialChoice('recurring');
+      setShowMySchedule(true);
+    } else {
+      setMyScheduleInitialChoice('import');
+      setShowMySchedule(true);
+    }
+  };
+
+  const handleSaveQuickBlock = async (data: QuickAddSaveData) => {
+    const [sh, sm] = data.startTime.split(':').map(Number);
+    const [eh, em] = data.endTime.split(':').map(Number);
+    const startMin = sh * 60 + sm;
+    const endMin = eh * 60 + em;
+    const newBlocks = await createBlocks([{
+      id: '',
+      title: data.title,
+      durationMinutes: endMin - startMin,
+      date: data.date,
+      startTime: startMin,
+      endTime: endMin,
+      source: 'task' as const,
+      reasoning: data.notes || undefined,
+    }]);
+    setItems(prev => [...prev, ...newBlocks]);
+  };
+
+  return (
+    <div className="relative h-full min-h-0 overflow-y-auto px-4 pb-8 pt-6 md:px-8 md:pb-12 md:pt-10">
+      {/* Ambient warm-hue background — soft, diffused, brand-inspired */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+        <div style={{position:'absolute', top:'-8rem', left:'-6rem', width:'44rem', height:'40rem', borderRadius:'9999px', background:'radial-gradient(ellipse at center, rgba(249,168,212,0.22) 0%, rgba(251,207,232,0.08) 45%, transparent 72%)', filter:'blur(32px)'}} />
+        <div style={{position:'absolute', top:'-3rem', right:'-8rem', width:'38rem', height:'34rem', borderRadius:'9999px', background:'radial-gradient(ellipse at center, rgba(251,146,60,0.16) 0%, rgba(253,186,116,0.06) 45%, transparent 72%)', filter:'blur(40px)'}} />
+        <div style={{position:'absolute', top:'10rem', left:'50%', transform:'translateX(-50%)', width:'60rem', height:'24rem', borderRadius:'9999px', background:'radial-gradient(ellipse at center, rgba(244,114,182,0.09) 0%, transparent 65%)', filter:'blur(52px)'}} />
+        <div style={{position:'absolute', bottom:'-6rem', right:'8%', width:'34rem', height:'30rem', borderRadius:'9999px', background:'radial-gradient(ellipse at center, rgba(167,139,250,0.11) 0%, transparent 70%)', filter:'blur(44px)'}} />
+        <div style={{position:'absolute', bottom:'12%', left:'3%', width:'28rem', height:'24rem', borderRadius:'9999px', background:'radial-gradient(ellipse at center, rgba(251,113,133,0.07) 0%, transparent 70%)', filter:'blur(36px)'}} />
+      </div>
       <div className="mx-auto flex max-w-7xl flex-col gap-6 md:gap-8">
         <div
-          className="relative overflow-hidden rounded-2xl border border-black/[0.06] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_12px_32px_-8px_rgba(0,0,0,0.06)] md:p-8"
+          className="relative overflow-hidden rounded-3xl border border-black/[0.06] bg-white/80 p-6 shadow-[0_4px_40px_-12px_rgba(15,23,42,0.1)] backdrop-blur-2xl md:p-8"
           style={{fontFeatureSettings: "'cv11', 'ss01', 'ss03'"}}
         >
-          <div className="pointer-events-none absolute right-5 top-4 flex gap-1 opacity-70">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#D1D5DB]" />
-            <span className="h-1.5 w-1.5 rounded-full bg-[#E5E7EB]" />
-            <span className="h-1.5 w-1.5 rounded-full bg-[#DBEAFE]" />
+          {/* Inner top-edge glass highlight */}
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent" aria-hidden="true" />
+          <div className="flex items-start gap-4">
+            <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-rose-100/80 bg-gradient-to-br from-rose-50 to-pink-50 text-rose-400 shadow-[0_8px_20px_-12px_rgba(244,114,182,0.35)]">
+              <Sparkles size={17} />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-[25px] font-semibold tracking-tight text-[#111827]" style={{letterSpacing: '-0.022em'}}>
+                Plan with AI
+              </h1>
+              <p className="mt-1.5 max-w-2xl text-[13.5px] leading-6 text-[#6B7280]">
+                Describe your deadlines, exams, tasks, or routines — Noted will build a calm, balanced schedule around your week.
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-[30px] font-semibold tracking-tight text-[#111827]" style={{letterSpacing: '-0.02em'}}>
-              AI Scheduler
-            </h1>
-            <span className="sparkle-breathe inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#EEF2FF] text-[#6366F1] shadow-[0_6px_16px_-8px_rgba(99,102,241,0.6)]">
-              <Sparkles size={14} />
-            </span>
-          </div>
-          <p className="mt-1 text-[13px] font-normal text-[#6B7280]">
-            Tell me what you need to do, and I&apos;ll plan it around your schedule.
-          </p>
 
-          <div className={`${loading ? 'thinking-ring mt-4 rounded-2xl p-0.5' : 'mt-4'}`}>
+          <div className="mt-7">
             <textarea
               ref={promptRef}
               value={prompt}
               onChange={e => setPrompt(e.target.value)}
-              placeholder="What's on your mind? Try 'I have a chemistry test next Friday and need to finish my essay by Wednesday'..."
-              className="min-h-[182px] w-full rounded-xl border border-[#E5E7EB] bg-[#FCFCFD] p-4 text-sm text-[#1F2937] outline-none transition placeholder:italic focus:border-[#93C5FD] focus:ring-4 focus:ring-[#DBEAFE] focus:shadow-[inset_0_1px_4px_rgba(0,0,0,0.03),0_0_0_8px_rgba(191,219,254,0.22)]"
+              placeholder="e.g. I have a chemistry test next Friday and a 4-page essay due Wednesday."
+              className="min-h-[168px] w-full resize-none rounded-2xl border border-black/[0.07] bg-white/65 px-5 py-4 text-[14px] leading-7 text-[#1F2937] outline-none backdrop-blur-sm transition-all duration-200 placeholder:text-[#C0C8D8] focus:border-rose-200/60 focus:bg-white/85 focus:ring-4 focus:ring-rose-50/90"
+            />
+
+            <QuickSuggestions
+              visible
+              onPick={text => {
+                setPrompt(text);
+                promptRef.current?.focus();
+              }}
             />
           </div>
-          {promptLength > 200 && (
-            <p className="mt-1 text-right text-[11px] tabular-nums text-[#9CA3AF]">{promptLength} characters</p>
-          )}
 
-          <QuickSuggestions
-            visible={!prompt.trim()}
-            onPick={text => {
-              setPrompt(text);
-              promptRef.current?.focus();
-            }}
-          />
+          <div className="mt-5">
+            <button
+              type="button"
+              onClick={() => setShowOptions(prev => !prev)}
+              className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/50 px-3.5 py-2 text-[12px] font-medium text-[#6B7280] backdrop-blur-sm transition-all hover:bg-white/70 hover:text-[#374151]"
+            >
+              <ChevronDown size={12} className={`transition-transform duration-200 ${showOptions ? 'rotate-180' : ''}`} />
+              Planning preferences
+              {(!includeDatedTasks || splitBigWork || avoidLateNightStudy) && (
+                <span className="ml-0.5 flex h-1.5 w-1.5 rounded-full bg-rose-400" />
+              )}
+            </button>
+            {showOptions && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-black/[0.06] bg-white/60 px-3.5 py-2 text-[12px] font-medium text-[#4B5563] backdrop-blur-sm transition-all hover:bg-white/80">
+                  <input
+                    type="checkbox"
+                    checked={includeDatedTasks}
+                    onChange={() => setIncludeDatedTasks(prev => !prev)}
+                    className="h-3.5 w-3.5 rounded border-[#CBD5E1] text-rose-500 focus:ring-rose-200"
+                  />
+                  Use existing tasks
+                </label>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-black/[0.06] bg-white/60 px-3.5 py-2 text-[12px] font-medium text-[#4B5563] backdrop-blur-sm transition-all hover:bg-white/80">
+                  <input
+                    type="checkbox"
+                    checked={splitBigWork}
+                    onChange={() => setSplitBigWork(prev => !prev)}
+                    className="h-3.5 w-3.5 rounded border-[#CBD5E1] text-rose-500 focus:ring-rose-200"
+                  />
+                  Split big work into smaller sessions
+                </label>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-black/[0.06] bg-white/60 px-3.5 py-2 text-[12px] font-medium text-[#4B5563] backdrop-blur-sm transition-all hover:bg-white/80">
+                  <input
+                    type="checkbox"
+                    checked={avoidLateNightStudy}
+                    onChange={() => setAvoidLateNightStudy(prev => !prev)}
+                    className="h-3.5 w-3.5 rounded border-[#CBD5E1] text-rose-500 focus:ring-rose-200"
+                  />
+                  Avoid late-night study
+                </label>
+              </div>
+            )}
+          </div>
 
-          {loading && (
-            <div className="relative mt-3 inline-flex items-center gap-2 rounded-full bg-[#EEF2FF]/90 px-3 py-1.5 text-xs font-medium text-[#4F46E5] shadow-[0_8px_20px_-12px_rgba(79,70,229,0.45)]">
-              <span>Planning your schedule...</span>
-              <span className="inline-flex gap-1">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#6366F1]" />
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#6366F1]" style={{animationDelay: '0.15s'}} />
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#6366F1]" style={{animationDelay: '0.3s'}} />
-              </span>
-            </div>
-          )}
-
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="mt-7 flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={() => void runGeneration()}
               disabled={loading || saving}
-              className="group inline-flex translate-y-0 items-center gap-2 rounded-xl bg-gradient-to-r from-[#4338CA] to-[#2563EB] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(0,0,0,0.08),0_10px_24px_-10px_rgba(67,56,202,0.6)] transition hover:-translate-y-[1px] hover:shadow-[0_1px_2px_rgba(0,0,0,0.08),0_16px_30px_-10px_rgba(67,56,202,0.72)] active:translate-y-0 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-2xl bg-[#18181b] px-5 py-2.5 text-[13.5px] font-semibold text-white shadow-[0_8px_24px_-8px_rgba(0,0,0,0.28)] transition-all hover:bg-[#27272a] hover:shadow-[0_10px_28px_-8px_rgba(0,0,0,0.34)] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Sparkles size={14} className="transition group-hover:scale-110" />
-              {loading ? 'Planning your schedule...' : saving ? 'Saving...' : 'Generate Schedule'}
+              <Sparkles size={14} />
+              {loading ? 'Generating draft...' : saving ? 'Saving...' : 'Generate draft schedule'}
             </button>
-
-            <button
-              type="button"
-              onClick={() => setIncludeDatedTasks(prev => !prev)}
-              className="inline-flex items-center gap-2 text-xs font-medium text-[#4B5563]"
-            >
-              <span
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                  includeDatedTasks ? 'bg-[#3B82F6]' : 'bg-[#D1D5DB]'
-                }`}
-              >
-                <span
-                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
-                    includeDatedTasks ? 'translate-x-5' : 'translate-x-0.5'
-                  }`}
-                />
-              </span>
-              Include tasks with due dates
-            </button>
-
+            {loading && (
+              <p className="text-[12.5px] font-medium text-[#9CA3AF]">
+                Building your schedule around what&apos;s already on your calendar...
+              </p>
+            )}
             <span
-              className={`ml-auto rounded-full border px-3 py-1.5 text-xs tabular-nums backdrop-blur-md ${
+              className={`rounded-full border px-3 py-1.5 text-[11px] tabular-nums backdrop-blur-sm ${
                 remaining > 0
-                  ? 'border-white/60 bg-[#EEF2FF]/70 text-[#4F46E5]'
-                  : 'border-[#FED7AA] bg-[#FFF7ED]/90 text-[#9A3412]'
+                  ? 'border-black/[0.06] bg-white/50 text-[#9CA3AF]'
+                  : 'border-amber-200/70 bg-amber-50/60 text-amber-700'
               }`}
             >
               {quotaLabel}
             </span>
           </div>
-          {loading && (
-            <div className="pointer-events-none absolute right-6 top-28 flex gap-2">
-              <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-[#A5B4FC]" />
-              <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-[#93C5FD]" style={{animationDelay: '0.3s'}} />
-              <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-[#C4B5FD]" style={{animationDelay: '0.6s'}} />
-            </div>
-          )}
 
           {error && (
-            <div className="mt-3 inline-flex items-center gap-2 rounded-xl bg-[#FFF1F2] px-3 py-2 text-sm text-[#BE123C]">
+            <div className="mt-4 inline-flex items-center gap-2 rounded-2xl bg-rose-50/80 px-4 py-2.5 text-[13px] text-rose-700 backdrop-blur-sm">
               <AlertCircle size={14} />
               {error}
             </div>
           )}
-          {loadingSavedBlocks && <p className="mt-3 text-xs text-[#6B7280]">Loading saved blocks...</p>}
+          {loadingSavedBlocks && <p className="mt-4 text-[12px] text-[#9CA3AF]">Loading saved blocks...</p>}
         </div>
 
-        <RecurringScheduleCard recurringCount={recurringBlocks.length} onManage={() => setShowMySchedule(true)} />
+        {draftPlan && (
+          <div className="rounded-3xl border border-[#BFDBFE] bg-[#F8FBFF] p-5 shadow-[0_1px_3px_rgba(15,23,42,0.04),0_16px_30px_-24px_rgba(37,99,235,0.18)] md:p-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-[22px] font-semibold tracking-tight text-[#111827]">AI Draft Plan</h2>
+                  <span className="rounded-full border border-[#BFDBFE] bg-white px-2.5 py-1 text-[11px] font-medium text-[#2563EB]">
+                    {isEditingDraft ? 'Editing draft' : 'Not saved yet'}
+                  </span>
+                  {draftPlan.source === 'mock' && (
+                    <span className="rounded-full border border-[#E5E7EB] bg-white px-2.5 py-1 text-[11px] font-medium text-[#6B7280]">
+                      Sample preview
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-[13px] leading-6 text-[#6B7280]">
+                  Review the suggested sessions before adding them to your calendar.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-[#DBEAFE] bg-white/80 px-3 py-2 text-xs text-[#4B5563]">
+                Nothing is saved yet until you approve.
+              </div>
+            </div>
 
-        <div className="h-px w-full bg-gradient-to-r from-transparent via-black/[0.08] to-transparent" />
+            <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+              <section className="rounded-2xl border border-[#DCEAFE] bg-white p-4">
+                <div className="flex items-center gap-2">
+                  <Lightbulb size={15} className="text-[#2563EB]" />
+                  <h3 className="text-sm font-semibold text-[#111827]">What I understood</h3>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-[#6B7280]">
+                  Detected work, deadlines, and estimated study time from your request.
+                </p>
+                {isEditingDraft && (
+                  <p className="mt-2 text-xs leading-5 text-[#6B7280]">
+                    Change the proposed sessions manually or click Regenerate to rebuild the plan.
+                  </p>
+                )}
 
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
+                {draftPlan.reasoning && (
+                  <div className="mt-4 rounded-2xl border border-[#E0ECFF] bg-[#F8FBFF] px-3.5 py-3 text-[13px] leading-6 text-[#35517A]">
+                    {draftPlan.reasoning}
+                  </div>
+                )}
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {draftPlan.understoodItems.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-[#DCEAFE] bg-[#FBFDFF] p-4 text-sm text-[#6B7280] md:col-span-2">
+                      No detected tasks. Add one manually or regenerate the plan.
+                    </div>
+                  ) : (
+                    draftPlan.understoodItems.map(item => (
+                      <div key={item.id} className="rounded-2xl border border-[#E5E7EB] bg-[#FCFDFE] p-4">
+                        {isEditingDraft ? (
+                          <div className="space-y-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <input
+                                value={item.title}
+                                onChange={e => updateDraftTask(item.id, {title: e.target.value})}
+                                className="w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm font-semibold text-[#111827] outline-none focus:border-[#BFDBFE] focus:ring-4 focus:ring-[#DBEAFE]/70"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeDraftTask(item.id)}
+                                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#E5E7EB] bg-white text-[#6B7280] transition hover:bg-[#F9FAFB] hover:text-[#DC2626]"
+                                aria-label="Remove detected task"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <label className="text-[11px] font-medium text-[#6B7280]">
+                                Deadline
+                                <input
+                                  type="date"
+                                  value={item.deadline}
+                                  onChange={e => {
+                                    if (!e.target.value) return;
+                                    updateDraftTask(item.id, {deadline: e.target.value});
+                                  }}
+                                  className="mt-1 w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#111827] outline-none focus:border-[#BFDBFE] focus:ring-4 focus:ring-[#DBEAFE]/70"
+                                />
+                              </label>
+                              <label className="text-[11px] font-medium text-[#6B7280]">
+                                Estimated work (min)
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={15}
+                                  value={item.estimatedMinutes}
+                                  onChange={e => updateDraftTask(item.id, {estimatedMinutes: Math.max(0, Number(e.target.value) || 0)})}
+                                  className="mt-1 w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#111827] outline-none focus:border-[#BFDBFE] focus:ring-4 focus:ring-[#DBEAFE]/70"
+                                />
+                              </label>
+                              <label className="text-[11px] font-medium text-[#6B7280] sm:col-span-2">
+                                Suggested sessions
+                                <input
+                                  type="number"
+                                  min={1}
+                                  step={1}
+                                  value={item.suggestedSessions}
+                                  onChange={e => updateDraftTask(item.id, {suggestedSessions: Math.max(1, Number(e.target.value) || 1)})}
+                                  className="mt-1 w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#111827] outline-none focus:border-[#BFDBFE] focus:ring-4 focus:ring-[#DBEAFE]/70"
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="text-sm font-semibold text-[#111827]">{item.title}</div>
+                            <div className="mt-3 space-y-2 text-xs text-[#6B7280]">
+                              <div className="flex items-center justify-between gap-3">
+                                <span>Deadline</span>
+                                <span className="font-medium text-[#1F2937]">{formatDeadlineLabel(item.deadline)}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-3">
+                                <span>Estimated work</span>
+                                <span className="font-medium text-[#1F2937]">{formatDurationLabel(item.estimatedMinutes)}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-3">
+                                <span>Suggested sessions</span>
+                                <span className="font-medium text-[#1F2937]">{item.suggestedSessions}</span>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+                {isEditingDraft && (
+                  <button
+                    type="button"
+                    onClick={addDraftTask}
+                    className="mt-4 inline-flex items-center gap-2 rounded-xl border border-[#D1D5DB] bg-white px-3.5 py-2 text-sm font-medium text-[#374151] transition hover:bg-[#F9FAFB]"
+                  >
+                    <Plus size={14} />
+                    Add task
+                  </button>
+                )}
+              </section>
+
+              <section className="rounded-2xl border border-[#DCEAFE] bg-white p-4">
+                <div className="flex items-center gap-2">
+                  <Clock3 size={15} className="text-[#2563EB]" />
+                  <h3 className="text-sm font-semibold text-[#111827]">Proposed schedule</h3>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-[#6B7280]">
+                  Suggested study blocks to review before they become real calendar events.
+                </p>
+
+                <div className="mt-4 space-y-3">
+                  {draftPlan.proposedBlocks.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-[#BFDBFE] bg-[#FBFDFF] p-4 text-sm text-[#6B7280]">
+                      No sessions in this draft yet. Add one manually or regenerate the plan.
+                    </div>
+                  ) : (
+                    draftPlan.proposedBlocks.map(block => (
+                      <div
+                        key={block.id}
+                        className="rounded-2xl border border-dashed border-[#BFDBFE] bg-[#EFF6FF]/70 p-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full border border-[#BFDBFE] bg-white px-2 py-1 font-medium text-[#2563EB]">
+                              {block.source === 'manual' ? 'Manual draft' : 'AI draft'}
+                            </span>
+                            {!isEditingDraft && (
+                              <>
+                                <span className="font-medium text-[#35517A]">{formatBlockDateLabel(block.date)}</span>
+                                <span className="text-[#6B7280]">
+                                  {formatTimeLabel(block.startTime)}-{formatTimeLabel(block.endTime)}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          {isEditingDraft && (
+                            <button
+                              type="button"
+                              onClick={() => removeDraftBlock(block.id)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-[#D6E6FF] bg-white px-2.5 py-1.5 text-[11px] font-medium text-[#6B7280] transition hover:text-[#DC2626]"
+                            >
+                              <Trash2 size={12} />
+                              Remove
+                            </button>
+                          )}
+                        </div>
+
+                        {isEditingDraft ? (
+                          <div className="mt-3 space-y-3">
+                            <input
+                              value={block.title}
+                              onChange={e => updateDraftBlockText(block.id, {title: e.target.value})}
+                              className="w-full rounded-xl border border-[#D6E6FF] bg-white px-3 py-2.5 text-sm font-semibold text-[#111827] outline-none focus:border-[#BFDBFE] focus:ring-4 focus:ring-[#DBEAFE]/70"
+                            />
+                            <div className="grid gap-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_auto]">
+                              <label className="text-[11px] font-medium text-[#6B7280]">
+                                Date
+                                <input
+                                  type="date"
+                                  value={block.date}
+                                  onChange={e => {
+                                    if (!e.target.value) return;
+                                    updateDraftBlockText(block.id, {date: e.target.value});
+                                  }}
+                                  className="mt-1 w-full rounded-xl border border-[#D6E6FF] bg-white px-3 py-2 text-sm text-[#111827] outline-none focus:border-[#BFDBFE] focus:ring-4 focus:ring-[#DBEAFE]/70"
+                                />
+                              </label>
+                              <label className="text-[11px] font-medium text-[#6B7280]">
+                                Start
+                                <input
+                                  type="time"
+                                  value={formatTimeLabel(block.startTime)}
+                                  onChange={e => updateDraftBlockStartTime(block.id, e.target.value)}
+                                  className="mt-1 w-full rounded-xl border border-[#D6E6FF] bg-white px-3 py-2 text-sm text-[#111827] outline-none focus:border-[#BFDBFE] focus:ring-4 focus:ring-[#DBEAFE]/70"
+                                />
+                              </label>
+                              <label className="text-[11px] font-medium text-[#6B7280]">
+                                End
+                                <input
+                                  type="time"
+                                  value={formatTimeLabel(block.endTime)}
+                                  onChange={e => updateDraftBlockEndTime(block.id, e.target.value)}
+                                  className="mt-1 w-full rounded-xl border border-[#D6E6FF] bg-white px-3 py-2 text-sm text-[#111827] outline-none focus:border-[#BFDBFE] focus:ring-4 focus:ring-[#DBEAFE]/70"
+                                />
+                              </label>
+                              <div className="text-[11px] font-medium text-[#6B7280]">
+                                Duration
+                                <div className="mt-1 rounded-xl border border-[#D6E6FF] bg-white px-3 py-2 text-sm text-[#111827]">
+                                  {formatDurationLabel(block.durationMinutes)}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mt-2 flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-semibold text-[#111827]">{block.title}</div>
+                            </div>
+                            <div className="shrink-0 text-xs font-medium text-[#4B5563]">
+                              {formatDurationLabel(block.durationMinutes)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+                {isEditingDraft && (
+                  <button
+                    type="button"
+                    onClick={addDraftBlock}
+                    className="mt-4 inline-flex items-center gap-2 rounded-xl border border-[#D1D5DB] bg-white px-3.5 py-2 text-sm font-medium text-[#374151] transition hover:bg-[#F9FAFB]"
+                  >
+                    <Plus size={14} />
+                    Add session
+                  </button>
+                )}
+              </section>
+            </div>
+
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              {!isEditingDraft ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void saveDraftToCalendar()}
+                    disabled={saving || draftPlan.proposedBlocks.length === 0}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#1D4ED8] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_-16px_rgba(37,99,235,0.7)] transition hover:bg-[#1E40AF] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Save size={14} />
+                    {saving ? 'Saving...' : 'Save to calendar'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={startEditingDraft}
+                    className="inline-flex items-center gap-2 rounded-xl border border-[#D1D5DB] bg-white px-4 py-2.5 text-sm font-medium text-[#374151] transition hover:bg-[#F9FAFB]"
+                  >
+                    <PencilLine size={14} />
+                    Edit
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={saveDraftChanges}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#1D4ED8] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_-16px_rgba(37,99,235,0.7)] transition hover:bg-[#1E40AF]"
+                  >
+                    <Save size={14} />
+                    Save changes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelDraftChanges}
+                    className="inline-flex items-center gap-2 rounded-xl border border-[#D1D5DB] bg-white px-4 py-2.5 text-sm font-medium text-[#374151] transition hover:bg-[#F9FAFB]"
+                  >
+                    <X size={14} />
+                    Cancel
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => void runGeneration()}
+                disabled={loading || saving}
+                className="inline-flex items-center gap-2 rounded-xl border border-[#D1D5DB] bg-white px-4 py-2.5 text-sm font-medium text-[#374151] transition hover:bg-[#F9FAFB] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                Regenerate
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-6 md:space-y-8">
+          <div className="flex items-center">
             <ViewSwitcher
               value={viewMode}
               options={[
@@ -476,27 +1317,19 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
             />
           </div>
 
-          {reasoning && (
-            <div className="rounded-2xl border border-[#BFDBFE] bg-[#EFF6FF] p-4 text-[13px] text-[#1E3A8A] shadow-sm">
-              <div className="mb-1 inline-flex items-center gap-1.5 font-semibold">
-                <Lightbulb size={14} />
-                AI note
-              </div>
-              <p>{reasoning}</p>
-            </div>
-          )}
-
-          <div className="rounded-2xl border border-black/[0.06] bg-white/96 p-3 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_12px_32px_-8px_rgba(0,0,0,0.06)] backdrop-blur-sm md:p-4">
-            {viewMode === 'calendar' ? (
-              !hasCalendarContent && isFullyEmpty ? (
+          {viewMode === 'calendar' ? (
+            !hasCalendarContent && isFullyEmpty ? (
+              <div className="overflow-hidden rounded-3xl border border-black/[0.06] bg-white/80 shadow-[0_4px_40px_-12px_rgba(15,23,42,0.08)] backdrop-blur-xl">
                 <CalendarEmptyState onSetupSchedule={() => setShowMySchedule(true)} />
-              ) : (
-                <CalendarView items={calendarItems} deadline={latestDeadline} onUpdate={updateItem} onDelete={deleteItem} />
-              )
+              </div>
             ) : (
-              <div className="space-y-4 pb-2">
+              <CalendarView items={calendarItems} deadline={latestDeadline} onUpdate={updateItem} onDelete={deleteItem} onQuickAdd={handleQuickAdd} onCommitRecurringDrop={handleCommitRecurringDrop} onUndoRecurringDrop={handleUndoRecurringDrop} />
+            )
+          ) : (
+            <div className="rounded-3xl border border-black/[0.06] bg-white/80 p-5 shadow-[0_4px_40px_-12px_rgba(15,23,42,0.08)] backdrop-blur-xl md:p-7">
+              <div className="space-y-3 pb-1">
                 {dayGroups.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-[#D1D5DB] bg-[#FAFAFA] p-6 text-sm text-[#6B7280]">
+                  <div className="rounded-2xl border border-dashed border-black/[0.08] bg-white/50 p-7 text-center text-[13px] text-[#9CA3AF] backdrop-blur-sm">
                     No schedule yet. Generate one to see tasks grouped by day.
                   </div>
                 ) : (
@@ -507,10 +1340,10 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
                   ))
                 )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          <TodayAtAGlance items={calendarItems} />
+          <TodayAtAGlance items={calendarItems} onUpdate={updateItem} onDelete={deleteItem} />
         </div>
       </div>
 
@@ -520,14 +1353,26 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
         </div>
       )}
 
+      {quickAddMode && (
+        <QuickAddModal
+          mode={quickAddMode}
+          onSave={handleSaveQuickBlock}
+          onClose={() => setQuickAddMode(null)}
+        />
+      )}
+
       {showMySchedule && (
         <MyScheduleScreen
           blocks={recurringBlocks}
           exceptions={recurringExceptions}
           imports={scheduleImports}
           subjectColorMap={subjectColorMap}
+          initialTab="add"
+          initialChoice={myScheduleInitialChoice}
+          directEntry={myScheduleInitialChoice !== null}
           onClose={() => {
             setShowMySchedule(false);
+            setMyScheduleInitialChoice(null);
             void refreshRecurringData();
           }}
           onDeleteBlock={async id => {

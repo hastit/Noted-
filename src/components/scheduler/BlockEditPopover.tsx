@@ -54,7 +54,7 @@ export default function BlockEditPopover({block, anchorRect, onClose, onSave, on
   return (
     <div
       data-block-popover
-      className="fixed z-[600] w-[280px] rounded-xl border border-black/15 bg-white p-3 shadow-[0_12px_40px_rgba(0,0,0,0.18)] ring-1 ring-black/[0.06]"
+      className="fixed z-[600] w-[288px] rounded-2xl border border-black/[0.08] bg-white/95 p-4 shadow-[0_16px_48px_rgba(0,0,0,0.14)] backdrop-blur-xl ring-1 ring-black/[0.04]"
       style={{left: position.left, top: position.top}}
     >
       <div className="space-y-2.5 text-xs text-[#374151]">
@@ -63,7 +63,7 @@ export default function BlockEditPopover({block, anchorRect, onClose, onSave, on
           <input
             value={title}
             onChange={e => setTitle(e.target.value)}
-            className="w-full rounded-md border border-[#E5E7EB] px-2 py-1.5 outline-none focus:border-[#93C5FD]"
+            className="w-full rounded-xl border border-black/[0.08] bg-white/80 px-2.5 py-1.5 outline-none focus:border-indigo-200 focus:ring-2 focus:ring-indigo-100"
           />
         </label>
         <label className="block">
@@ -72,7 +72,7 @@ export default function BlockEditPopover({block, anchorRect, onClose, onSave, on
             type="date"
             value={date}
             onChange={e => setDate(e.target.value)}
-            className="w-full rounded-md border border-[#E5E7EB] px-2 py-1.5 outline-none focus:border-[#93C5FD]"
+            className="w-full rounded-xl border border-black/[0.08] bg-white/80 px-2.5 py-1.5 outline-none focus:border-indigo-200 focus:ring-2 focus:ring-indigo-100"
           />
         </label>
         <div className="grid grid-cols-2 gap-2">
@@ -82,7 +82,7 @@ export default function BlockEditPopover({block, anchorRect, onClose, onSave, on
               type="time"
               value={start}
               onChange={e => setStart(e.target.value)}
-              className="w-full rounded-md border border-[#E5E7EB] px-2 py-1.5 outline-none focus:border-[#93C5FD]"
+              className="w-full rounded-xl border border-black/[0.08] bg-white/80 px-2.5 py-1.5 outline-none focus:border-indigo-200 focus:ring-2 focus:ring-indigo-100"
             />
           </label>
           <label className="block">
@@ -91,7 +91,7 @@ export default function BlockEditPopover({block, anchorRect, onClose, onSave, on
               type="time"
               value={end}
               onChange={e => setEnd(e.target.value)}
-              className="w-full rounded-md border border-[#E5E7EB] px-2 py-1.5 outline-none focus:border-[#93C5FD]"
+              className="w-full rounded-xl border border-black/[0.08] bg-white/80 px-2.5 py-1.5 outline-none focus:border-indigo-200 focus:ring-2 focus:ring-indigo-100"
             />
           </label>
         </div>
@@ -103,14 +103,14 @@ export default function BlockEditPopover({block, anchorRect, onClose, onSave, on
             step={5}
             value={duration}
             onChange={e => setDuration(Math.max(15, Number(e.target.value) || 15))}
-            className="w-full rounded-md border border-[#E5E7EB] px-2 py-1.5 outline-none focus:border-[#93C5FD]"
+            className="w-full rounded-xl border border-black/[0.08] bg-white/80 px-2.5 py-1.5 outline-none focus:border-indigo-200 focus:ring-2 focus:ring-indigo-100"
           />
         </label>
       </div>
       <div className="mt-3 flex items-center justify-between">
         <button
           type="button"
-          className="rounded-md px-2 py-1 text-xs font-medium text-[#DC2626] hover:bg-[#FEF2F2]"
+          className="rounded-xl px-2.5 py-1 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
           onClick={() => {
             onDelete(block.id);
             onClose();
@@ -119,12 +119,12 @@ export default function BlockEditPopover({block, anchorRect, onClose, onSave, on
           Delete
         </button>
         <div className="flex gap-2">
-          <button type="button" className="rounded-md border border-[#E5E7EB] px-2 py-1 text-xs" onClick={onClose}>
+          <button type="button" className="rounded-xl border border-black/[0.08] px-2.5 py-1 text-xs transition hover:bg-black/[0.04]" onClick={onClose}>
             Cancel
           </button>
           <button
             type="button"
-            className="rounded-md bg-black px-2 py-1 text-xs font-medium text-white"
+            className="rounded-xl bg-[#18181b] px-2.5 py-1 text-xs font-medium text-white transition hover:bg-[#27272a]"
             onClick={() => {
               const startTime = clampDay(toMinutes(start));
               const endTime = clampDay(toMinutes(end));

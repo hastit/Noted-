@@ -11,22 +11,25 @@ export default function RecurringScheduleCard({recurringCount, onManage}: Props)
     <button
       type="button"
       onClick={onManage}
-      className="w-full rounded-2xl border border-white/45 bg-white/65 p-4 text-left shadow-[0_1px_3px_rgba(0,0,0,0.04),0_10px_24px_-10px_rgba(0,0,0,0.08)] backdrop-blur-md transition duration-300 hover:scale-[1.01] hover:border-[#DBEAFE] hover:[box-shadow:0_0_0_1px_rgba(96,165,250,0.35),0_18px_34px_-14px_rgba(79,70,229,0.35)] md:p-5"
+      className="w-full rounded-3xl border border-black/[0.06] bg-white/80 p-5 text-left shadow-[0_4px_24px_-8px_rgba(15,23,42,0.08)] backdrop-blur-xl transition-all hover:border-rose-200/60 hover:bg-white/90 hover:shadow-[0_8px_32px_-8px_rgba(244,114,182,0.14)] md:p-6"
     >
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#3B82F6] shadow-[0_0_0_1px_rgba(219,234,254,0.9),0_10px_20px_-8px_rgba(59,130,246,0.5)]">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-rose-100/80 bg-gradient-to-br from-rose-50 to-pink-50 text-rose-400 shadow-[0_8px_20px_-12px_rgba(244,114,182,0.35)]">
           <CalendarClock size={20} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-base font-semibold text-[#111827]">Your weekly schedule</div>
-          <p className="mt-0.5 text-[13px] text-[#6B7280]">
+          <div className="text-[15px] font-semibold text-[#111827]">Routines</div>
+          <p className="mt-1 text-[13px] leading-5 text-[#6B7280]">
+            Classes, work, sports, and recurring events the AI should plan around.
+          </p>
+          <p className="mt-2 text-[12px] font-medium text-[#4B5563]">
             {hasRecurring
-              ? `${recurringCount} recurring events set up — the AI will work around them`
-              : 'Set up your weekly schedule once, and the AI will plan around your classes, work, and routines'}
+              ? `${recurringCount} recurring events set — AI will avoid these times.`
+              : 'No routines added yet — set your recurring commitments so AI can avoid these times.'}
           </p>
         </div>
-        <span className="rounded-[10px] border border-[#D1D5DB] bg-white px-3 py-1.5 text-xs font-semibold text-[#374151] shadow-sm">
-          {hasRecurring ? 'Manage' : 'Set up'}
+        <span className="w-fit rounded-2xl border border-black/[0.08] bg-[#18181b] px-4 py-2 text-[12.5px] font-semibold text-white shadow-[0_4px_12px_-4px_rgba(0,0,0,0.2)]">
+          Manage routines
         </span>
       </div>
     </button>

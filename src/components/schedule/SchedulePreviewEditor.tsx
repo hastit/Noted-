@@ -55,7 +55,7 @@ export default function SchedulePreviewEditor({initialEvents, sourceType, schedu
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-black/60">Review extracted rows before saving.</p>
+      <p className="text-xs text-black/60">Review the detected routine before saving it.</p>
       <div className="grid gap-3 md:grid-cols-2">
         <label className="text-xs text-black/70">
           Start date
@@ -68,14 +68,14 @@ export default function SchedulePreviewEditor({initialEvents, sourceType, schedu
       </div>
 
       <div className="rounded-xl border border-black/10 bg-[#fafafa] p-3">
-        <p className="text-xs font-semibold text-black/70">Save mode</p>
+        <p className="text-xs font-semibold text-black/70">How should this routine be saved?</p>
         <label className="mt-2 flex items-center gap-2 text-xs text-black/70">
           <input type="radio" checked={!replaceAll} onChange={() => setReplaceAll(false)} />
-          Add to existing schedule
+          Add to my existing routines
         </label>
         <label className="mt-1 flex items-center gap-2 text-xs text-black/70">
           <input type="radio" checked={replaceAll} onChange={() => setReplaceAll(true)} />
-          Replace all current events
+          Replace all current routines
         </label>
       </div>
 
@@ -191,13 +191,13 @@ export default function SchedulePreviewEditor({initialEvents, sourceType, schedu
                 replaceAll,
               });
             } catch (err) {
-              setError(err instanceof Error ? err.message : 'Unable to save extracted schedule.');
+              setError(err instanceof Error ? err.message : 'Unable to save this routine.');
             } finally {
               setSaving(false);
             }
           }}
         >
-          {saving ? 'Saving...' : 'Confirm and save'}
+          {saving ? 'Saving routine...' : 'Save routine'}
         </button>
       </div>
     </div>

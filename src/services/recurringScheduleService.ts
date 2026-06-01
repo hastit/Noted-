@@ -33,6 +33,7 @@ type RecurringScheduleExceptionRow = {
   modified_start_time: string | null;
   modified_end_time: string | null;
   modified_title: string | null;
+  modified_date: string | null;
   created_at: string;
 };
 
@@ -104,6 +105,7 @@ function rowToException(row: RecurringScheduleExceptionRow): RecurringScheduleEx
     modifiedStartTime: row.modified_start_time?.slice(0, 5) ?? null,
     modifiedEndTime: row.modified_end_time?.slice(0, 5) ?? null,
     modifiedTitle: row.modified_title,
+    modifiedDate: row.modified_date ?? null,
     createdAt: row.created_at,
   };
 }
@@ -226,16 +228,32 @@ export async function deleteAllRecurringBlocks() {
 }
 
 export async function fetchRecurringExceptions(range?: {startDate: string; endDate: string}) {
-  let query = supabase
-    .from('recurring_schedule_exceptions')
-    .select('id,user_id,recurring_block_id,exception_date,type,modified_start_time,modified_end_time,modified_title,created_at')
-    .order('exception_date', {ascending: true});
-  if (range) {
-    query = query.gte('exception_date', range.startDate).lte('exception_date', range.endDate);
+  const buildQuery = (cols: string) => {
+    let q = supabase
+      .from('recurring_schedule_exceptions')
+      .select(cols)
+      .order('exception_date', {ascending: true});
+    if (range) q = q.gte('exception_date', range.startDate).lte('exception_date', range.endDate);
+    return q;
+  };
+
+  // Try with the modified_date column (requires migration 20260601120000).
+  // If the column doesn't exist yet in the DB, fall back to the legacy column set
+  // so that the app keeps working while the migration is pending.
+  const withDate = await buildQuery(
+    'id,user_id,recurring_block_id,exception_date,type,modified_start_time,modified_end_time,modified_title,modified_date,created_at',
+  );
+  if (!withDate.error) {
+    return (withDate.data as unknown as RecurringScheduleExceptionRow[]).map(rowToException);
   }
-  const {data, error} = await query;
-  if (error) throw new Error('Unable to load recurring schedule exceptions.');
-  return (data as RecurringScheduleExceptionRow[]).map(rowToException);
+
+  const withoutDate = await buildQuery(
+    'id,user_id,recurring_block_id,exception_date,type,modified_start_time,modified_end_time,modified_title,created_at',
+  );
+  if (withoutDate.error) throw new Error('Unable to load recurring schedule exceptions.');
+  return (withoutDate.data as unknown as Omit<RecurringScheduleExceptionRow, 'modified_date'>[]).map(
+    row => rowToException({...row, modified_date: null}),
+  );
 }
 
 export async function createException(payload: {
@@ -245,26 +263,58 @@ export async function createException(payload: {
   modifiedStartTime?: string;
   modifiedEndTime?: string;
   modifiedTitle?: string;
+  modifiedDate?: string;
 }) {
   const {
     data: {user},
   } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated.');
-  const {data, error} = await supabase
+
+  const baseInsert = {
+    user_id: user.id,
+    recurring_block_id: payload.recurringBlockId,
+    exception_date: payload.exceptionDate,
+    type: payload.type,
+    modified_start_time: payload.modifiedStartTime ? `${payload.modifiedStartTime}:00` : null,
+    modified_end_time: payload.modifiedEndTime ? `${payload.modifiedEndTime}:00` : null,
+    modified_title: payload.modifiedTitle ?? null,
+  };
+
+  // Try inserting with modified_date (requires migration 20260601120000).
+  // Only include the column when there is an actual value or when fallback is available.
+  const {data: d1, error: e1} = await supabase
     .from('recurring_schedule_exceptions')
-    .insert({
-      user_id: user.id,
-      recurring_block_id: payload.recurringBlockId,
-      exception_date: payload.exceptionDate,
-      type: payload.type,
-      modified_start_time: payload.modifiedStartTime ? `${payload.modifiedStartTime}:00` : null,
-      modified_end_time: payload.modifiedEndTime ? `${payload.modifiedEndTime}:00` : null,
-      modified_title: payload.modifiedTitle ?? null,
-    })
+    .insert({...baseInsert, modified_date: payload.modifiedDate ?? null})
+    .select('id,user_id,recurring_block_id,exception_date,type,modified_start_time,modified_end_time,modified_title,modified_date,created_at')
+    .single();
+
+  if (!e1) return rowToException(d1 as unknown as RecurringScheduleExceptionRow);
+
+  // First insert failed. Log the real Supabase error for debugging.
+  console.warn('[createException] primary insert failed:', e1.message ?? e1);
+
+  // modified_date column may not exist yet (migration 20260601120000 pending).
+  // For cross-day moves we truly need the column; for same-day time-only changes
+  // we can fall back to an insert without the column.
+  if (payload.modifiedDate) {
+    console.error(
+      '[createException] Cross-day move requires the modified_date column.',
+      'Apply migration 20260601120000_add_modified_date_to_exceptions.sql in Supabase.',
+    );
+    throw new Error('Unable to save schedule exception.');
+  }
+
+  const {data: d2, error: e2} = await supabase
+    .from('recurring_schedule_exceptions')
+    .insert(baseInsert)
     .select('id,user_id,recurring_block_id,exception_date,type,modified_start_time,modified_end_time,modified_title,created_at')
     .single();
-  if (error) throw new Error('Unable to save schedule exception.');
-  return rowToException(data as RecurringScheduleExceptionRow);
+
+  if (e2) {
+    console.error('[createException] fallback insert also failed:', e2.message ?? e2);
+    throw new Error('Unable to save schedule exception.');
+  }
+  return rowToException({...(d2 as unknown as Omit<RecurringScheduleExceptionRow, 'modified_date'>), modified_date: null});
 }
 
 export async function createSkipRange(startDate: string, endDate: string, recurringBlockIds: string[]) {
