@@ -1,10 +1,11 @@
 import type {AIPlanResponse} from '../types/scheduler';
 import {supabase} from '../lib/supabase';
 
+const _supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? import.meta.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
 const endpoint =
   import.meta.env.VITE_AI_SCHEDULER_ENDPOINT ??
   import.meta.env.NEXT_PUBLIC_AI_SCHEDULER_ENDPOINT ??
-  '/api/ai-schedule';
+  (_supabaseUrl ? `${_supabaseUrl}/functions/v1/ai-schedule` : '/api/ai-schedule');
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
 let inFlightRequest: Promise<AIPlanResponse> | null = null;
 
@@ -63,14 +64,20 @@ export async function requestAiSchedule(input: {
       body: JSON.stringify(bodyPayload),
     });
     if (!res.ok) {
+      const rawBody = await res.text().catch(() => '');
+      console.error('[AI Schedule] HTTP', res.status, 'from', endpoint, '— raw body:', rawBody);
       let serverMessage = '';
       try {
-        const errPayload = (await res.json()) as {error?: string; message?: string};
-        serverMessage = errPayload.error ?? errPayload.message ?? '';
+        const errPayload = JSON.parse(rawBody) as {error?: unknown; message?: unknown; code?: unknown};
+        serverMessage =
+          typeof errPayload.error === 'string' ? errPayload.error
+          : typeof errPayload.message === 'string' ? errPayload.message
+          : typeof errPayload.code === 'string' ? errPayload.code
+          : '';
       } catch {
         serverMessage = '';
       }
-      throw friendlyError(serverMessage || 'Unable to generate a schedule right now. Please retry in a moment.');
+      throw friendlyError(serverMessage || `Server returned ${res.status}. Check the browser console for details.`);
     }
     const payload = (await res.json()) as {plan?: unknown};
     return parseJsonPlan(payload.plan);
