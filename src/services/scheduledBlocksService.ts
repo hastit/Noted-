@@ -18,11 +18,12 @@ function toIso(date: string, startTime: number) {
 }
 
 function rowToBlock(row: ScheduledBlockRow): ScheduledBlock {
+  // start_time is stored as UTC (toIso appends Z); use UTC accessors to match.
   const d = new Date(row.start_time);
-  const y = d.getFullYear();
-  const mo = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const startMinutes = d.getHours() * 60 + d.getMinutes();
+  const y = d.getUTCFullYear();
+  const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  const startMinutes = d.getUTCHours() * 60 + d.getUTCMinutes();
   return {
     id: row.id,
     title: row.title,
@@ -75,7 +76,11 @@ export async function updateBlock(id: string, changes: Partial<ScheduledBlock>):
   if (changes.reasoning !== undefined) patch.reasoning = changes.reasoning ?? null;
   if (changes.source !== undefined) patch.source = changes.source;
 
-  if (changes.date !== undefined || changes.startTime !== undefined) {
+  if (changes.date !== undefined && changes.startTime !== undefined) {
+    // Both provided (drag-and-drop) — compute directly without an extra round-trip.
+    patch.start_time = toIso(changes.date, changes.startTime);
+  } else if (changes.date !== undefined || changes.startTime !== undefined) {
+    // Only one provided — fetch the missing component from DB.
     const {data, error} = await supabase
       .from('scheduled_blocks')
       .select('start_time')
@@ -83,14 +88,12 @@ export async function updateBlock(id: string, changes: Partial<ScheduledBlock>):
       .single();
     if (error) throw new Error('Unable to update scheduled block.');
     const current = new Date((data as {start_time: string}).start_time);
-    const y = current.getFullYear();
-    const mo = String(current.getMonth() + 1).padStart(2, '0');
-    const day = String(current.getDate()).padStart(2, '0');
-    const existingDate = `${y}-${mo}-${day}`;
-    const existingStart = current.getHours() * 60 + current.getMinutes();
+    const existingDate = `${current.getUTCFullYear()}-${String(current.getUTCMonth() + 1).padStart(2, '0')}-${String(current.getUTCDate()).padStart(2, '0')}`;
+    const existingStart = current.getUTCHours() * 60 + current.getUTCMinutes();
     patch.start_time = toIso(changes.date ?? existingDate, changes.startTime ?? existingStart);
   }
 
+  if (Object.keys(patch).length === 0) return;
   const {error} = await supabase.from('scheduled_blocks').update(patch).eq('id', id);
   if (error) throw new Error('Unable to update scheduled block.');
 }

@@ -1376,8 +1376,15 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
             void refreshRecurringData();
           }}
           onDeleteBlock={async id => {
-            await deleteRecurringBlock(id);
-            await refreshRecurringData();
+            // Optimistic remove so the UI responds instantly.
+            setRecurringBlocks(prev => prev.filter(b => b.id !== id));
+            try {
+              await deleteRecurringBlock(id);
+            } catch {
+              // Restore on failure and tell the user.
+              await refreshRecurringData();
+              setToast("Couldn't delete this routine. Please try again.");
+            }
           }}
           onUpdateBlock={async (id, patch) => {
             await updateRecurringBlock(id, patch);
