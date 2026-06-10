@@ -788,6 +788,20 @@ export default function Calendar({events, tasks = [], onScheduledBlocksChange}: 
     }
   };
 
+  const handleSlotCreate = async (dayKey: string, startMinute: number, durationMinutes: number, title: string) => {
+    const endMinute = startMinute + durationMinutes;
+    const newBlocks = await createBlocks([{
+      id: '',
+      title,
+      durationMinutes,
+      date: dayKey,
+      startTime: startMinute,
+      endTime: endMinute,
+      source: 'task' as const,
+    }]);
+    setItems(prev => [...prev, ...newBlocks]);
+  };
+
   const handleSaveQuickBlock = async (data: EventSaveData) => {
     const [sh, sm] = data.startTime.split(':').map(Number);
     const [eh, em] = data.endTime.split(':').map(Number);
@@ -1282,7 +1296,7 @@ export default function Calendar({events, tasks = [], onScheduledBlocksChange}: 
                 <CalendarEmptyState onSetupSchedule={() => setShowMySchedule(true)} />
               </div>
             ) : (
-              <CalendarView items={calendarItems} deadline={latestDeadline} onUpdate={updateItem} onDelete={deleteItem} onQuickAdd={handleQuickAdd} onCommitRecurringDrop={handleCommitRecurringDrop} onUndoRecurringDrop={handleUndoRecurringDrop} />
+              <CalendarView items={calendarItems} deadline={latestDeadline} onUpdate={updateItem} onDelete={deleteItem} onQuickAdd={handleQuickAdd} onSlotCreate={handleSlotCreate} onCommitRecurringDrop={handleCommitRecurringDrop} onUndoRecurringDrop={handleUndoRecurringDrop} />
             )
           ) : (
             <div className="rounded-3xl border border-black/[0.06] bg-white/80 p-5 shadow-[0_4px_40px_-12px_rgba(15,23,42,0.08)] backdrop-blur-xl md:p-7">

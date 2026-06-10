@@ -1,4 +1,5 @@
 import {CalendarRange, Plus, Repeat2, Upload, X} from 'lucide-react';
+import {createPortal} from 'react-dom';
 import {useEffect, useMemo, useRef, useState} from 'react';
 import type {ScheduledBlock} from '../../types/scheduler';
 import BlockEditPopover from './BlockEditPopover';
@@ -9,12 +10,19 @@ import ViewSwitcher from './ViewSwitcher';
 
 type QuickAddType = 'manage-events' | 'routine' | 'import';
 
+type SlotAdd = {
+  dayKey: string;
+  hour: number;
+  pos: {top: number; left: number; openLeft: boolean};
+};
+
 type Props = {
   items: ScheduledBlock[];
   deadline?: string | null;
   onUpdate: (id: string, patch: Partial<ScheduledBlock>) => void;
   onDelete: (id: string) => void;
   onQuickAdd?: (type: QuickAddType) => void;
+  onSlotCreate?: (dayKey: string, startMinute: number, durationMinutes: number, title: string) => void;
   onCommitRecurringDrop?: (block: ScheduledBlock, preview: DropPreview) => Promise<{undoId: string}>;
   onUndoRecurringDrop?: (undoId: string) => Promise<void>;
 };
@@ -144,7 +152,7 @@ function TimeColumn({rowHeight}: {rowHeight: number}) {
   );
 }
 
-export default function CalendarView({items, deadline, onUpdate, onDelete, onQuickAdd, onCommitRecurringDrop, onUndoRecurringDrop}: Props) {
+export default function CalendarView({items, deadline, onUpdate, onDelete, onQuickAdd, onSlotCreate, onCommitRecurringDrop, onUndoRecurringDrop}: Props) {
   const [subView, setSubView] = useState<SubView>('week');
   const [cursorDate, setCursorDate] = useState<Date>(new Date());
   const [selected, setSelected] = useState<{block: ScheduledBlock; rect: DOMRect} | null>(null);
@@ -162,6 +170,11 @@ export default function CalendarView({items, deadline, onUpdate, onDelete, onQui
   const recurringToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [recurringConfirmBusy, setRecurringConfirmBusy] = useState(false);
   const [recurringConfirmError, setRecurringConfirmError] = useState<string | null>(null);
+
+  const [slotAdd, setSlotAdd] = useState<SlotAdd | null>(null);
+  const [slotTitle, setSlotTitle] = useState('');
+  const [slotDuration, setSlotDuration] = useState(60);
+  const slotInputRef = useRef<HTMLInputElement | null>(null);
 
   const rowHeight = isMobile ? HOUR_ROW_HEIGHT_PX.mobile : HOUR_ROW_HEIGHT_PX.desktop;
   const pxPerMinute = rowHeight / 60;
@@ -196,12 +209,15 @@ export default function CalendarView({items, deadline, onUpdate, onDelete, onQui
       if (event.key === 'Escape') {
         setSelected(null);
         setQuickAddOpen(false);
+        setSlotAdd(null);
       }
     };
     const onClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       if (target.closest('[data-block-id]') || target.closest('[data-block-popover]')) return;
+      if (target.closest('[data-slot-add-popover]')) return;
       setSelected(null);
+      setSlotAdd(null);
       if (quickAddRef.current && !quickAddRef.current.contains(target as Node)) {
         setQuickAddOpen(false);
       }
@@ -240,6 +256,30 @@ export default function CalendarView({items, deadline, onUpdate, onDelete, onQui
     if (!hasUserScrolledRef.current) container.scrollTo({top, behavior: 'smooth'});
     return () => container.removeEventListener('scroll', onUserScroll);
   }, [rowHeight, subView, cursorDate]); // intentionally excludes `now` — clock ticks must not re-scroll
+
+  const POPOVER_W = 228;
+  const POPOVER_H = 152;
+
+  const openSlotAdd = (dayKey: string, hour: number, slotEl: HTMLElement) => {
+    if (!onSlotCreate) return;
+    const rect = slotEl.getBoundingClientRect();
+    const spaceRight = window.innerWidth - rect.right;
+    const openLeft = spaceRight < POPOVER_W + 12;
+    const left = openLeft ? rect.left - POPOVER_W - 4 : rect.right + 4;
+    let top = rect.top;
+    if (top + POPOVER_H > window.innerHeight - 12) top = window.innerHeight - POPOVER_H - 12;
+    setSlotAdd({dayKey, hour, pos: {top, left, openLeft}});
+    setSlotTitle('');
+    setSlotDuration(60);
+    setTimeout(() => slotInputRef.current?.focus(), 30);
+  };
+
+  const commitSlotAdd = () => {
+    if (!slotAdd || !slotTitle.trim() || !onSlotCreate) return;
+    onSlotCreate(slotAdd.dayKey, slotAdd.hour * 60, slotDuration, slotTitle.trim());
+    setSlotAdd(null);
+    setSlotTitle('');
+  };
 
   return (
     <div className="overflow-hidden rounded-3xl border border-black/[0.06] bg-white/80 p-5 shadow-[0_4px_40px_-12px_rgba(15,23,42,0.1)] backdrop-blur-xl md:p-6">
@@ -443,7 +483,10 @@ export default function CalendarView({items, deadline, onUpdate, onDelete, onQui
                   className="relative border-r border-black/[0.04]"
                   style={{backgroundColor: isToday ? 'rgba(235,233,255,0.45)' : 'transparent'}}
                 >
-                  <HourGrid rowHeight={rowHeight} />
+                  <HourGrid
+                    rowHeight={rowHeight}
+                    onSlotClick={onSlotCreate ? (hour, el) => openSlotAdd(day.key, hour, el) : undefined}
+                  />
                   {isToday && (
                     <div
                       className="pointer-events-none absolute z-[11] h-[5px] w-[5px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-rose-400"
@@ -667,6 +710,92 @@ export default function CalendarView({items, deadline, onUpdate, onDelete, onQui
             <X size={13} />
           </button>
         </div>
+      )}
+
+      {/* ── Slot add popover ── */}
+      {slotAdd && createPortal(
+        <div
+          data-slot-add-popover
+          style={{
+            position: 'fixed',
+            top: slotAdd.pos.top,
+            left: slotAdd.pos.left,
+            width: POPOVER_W,
+            zIndex: 10050,
+          }}
+          className="rounded-2xl border border-black/[0.08] bg-white shadow-[0_12px_40px_-8px_rgba(15,23,42,0.18),0_4px_12px_-2px_rgba(15,23,42,0.06)] overflow-hidden"
+        >
+          {/* Accent bar */}
+          <div className="h-[2.5px] bg-gradient-to-r from-indigo-300/80 via-violet-300/80 to-sky-300/80" />
+
+          <div className="p-3">
+            {/* Time label */}
+            <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-widest text-[#94A3B8]">
+              {(() => {
+                const h = slotAdd.hour;
+                const suffix = h >= 12 ? 'PM' : 'AM';
+                const h12 = h % 12 === 0 ? 12 : h % 12;
+                return `${h12}:00 ${suffix} · ${new Date(`${slotAdd.dayKey}T12:00:00`).toLocaleDateString(undefined, {weekday: 'short', month: 'short', day: 'numeric'})}`;
+              })()}
+            </p>
+
+            {/* Title input */}
+            <input
+              ref={slotInputRef}
+              type="text"
+              value={slotTitle}
+              onChange={e => setSlotTitle(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') commitSlotAdd();
+                if (e.key === 'Escape') setSlotAdd(null);
+              }}
+              placeholder="Event title…"
+              className="mb-2.5 w-full rounded-xl border-none bg-black/[0.04] px-3 py-2 text-[13px] font-medium text-[#1E293B] placeholder:text-[#94A3B8] outline-none focus:ring-2 focus:ring-indigo-200 transition-all"
+            />
+
+            {/* Duration pills */}
+            <div className="mb-3 flex gap-1.5">
+              {[
+                {label: '30m', val: 30},
+                {label: '1h', val: 60},
+                {label: '2h', val: 120},
+              ].map(opt => (
+                <button
+                  key={opt.val}
+                  type="button"
+                  onClick={() => setSlotDuration(opt.val)}
+                  className={`flex-1 rounded-lg py-1.5 text-[11px] font-semibold transition-all ${
+                    slotDuration === opt.val
+                      ? 'bg-indigo-100 text-indigo-600'
+                      : 'bg-black/[0.04] text-[#6B7280] hover:bg-black/[0.07]'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={!slotTitle.trim()}
+                onClick={commitSlotAdd}
+                className="flex-1 rounded-xl bg-indigo-600 py-2 text-[12px] font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-40 disabled:pointer-events-none"
+              >
+                Add
+              </button>
+              <button
+                type="button"
+                onClick={() => setSlotAdd(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-xl bg-black/[0.04] text-[#94A3B8] transition hover:bg-black/[0.08] hover:text-[#475569]"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
 
       {/* ── Undo toast (recurring occurrence) ── */}
