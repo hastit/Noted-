@@ -2,7 +2,7 @@ import {useEffect, useMemo, useRef, useState} from 'react';
 import {AlertCircle, ChevronDown, Clock3, Lightbulb, PencilLine, Plus, RefreshCw, Save, Sparkles, Trash2, X} from 'lucide-react';
 import type {CalendarEvent, Tag, Task} from '../types';
 import type {AIPlanResponse, ScheduledBlock} from '../types/scheduler';
-import {requestAiSchedule} from '../services/aiSchedulerClient';
+import {requestAiSchedule, AiScheduleError} from '../services/aiSchedulerClient';
 import {
   consumeAiRequest,
   fetchServerRemainingAiRequests,
@@ -17,7 +17,7 @@ import {
   fetchAllBlocks,
   updateBlock as updateScheduledBlock,
 } from '../services/scheduledBlocksService';
-import {buildScheduleFromAiPlan, groupScheduleByDay, mapDueTasksToSchedule} from '../services/schedulingEngine';
+import {buildScheduleFromAiPlan, groupScheduleByDay, mapDueTasksToSchedule, type TimePreference} from '../services/schedulingEngine';
 import {getDatedTasks} from '../services/tasksAdapter';
 import {
   createScheduleImport,
@@ -40,8 +40,8 @@ import {
 import {expandRecurringBlocksForRange} from '../services/recurringScheduleExpansion';
 import CalendarView from './scheduler/CalendarView';
 import CalendarEmptyState from './scheduler/CalendarEmptyState';
-import QuickAddModal from './scheduler/QuickAddModal';
-import type {QuickAddSaveData} from './scheduler/QuickAddModal';
+import ManageEventsModal from './scheduler/ManageEventsModal';
+import type {EventSaveData} from './scheduler/ManageEventsModal';
 import QuickSuggestions from './scheduler/QuickSuggestions';
 import ScheduleDayGroup from './scheduler/ScheduleDayGroup';
 import TodayAtAGlance from './scheduler/TodayAtAGlance.tsx';
@@ -55,6 +55,7 @@ interface CalendarProps {
   tags: Tag[];
   onEventsChange: (events: CalendarEvent[]) => void;
   onTagsChange: (tags: Tag[]) => void;
+  onScheduledBlocksChange?: (blocks: ScheduledBlock[]) => void;
   tasks?: Task[];
 }
 
@@ -84,14 +85,26 @@ type DraftPlan = {
   proposedBlocks: DraftPlanBlock[];
 };
 
-function buildPlanningPreferences(options: {splitBigWork: boolean; avoidLateNightStudy: boolean}) {
+const TIME_PREF_LABELS: Record<TimePreference, string> = {
+  morning:   'Prefer mornings (8 AM–1 PM)',
+  afternoon: 'Prefer afternoons (1 PM–6 PM)',
+  evening:   'Prefer evenings (6 PM–9 PM)',
+  spread:    'Spread throughout the day',
+};
+
+const TIME_PREF_PROMPT: Record<TimePreference, string> = {
+  morning:   'Schedule sessions preferably in the morning (8 AM–1 PM); use afternoon or evening only when needed.',
+  afternoon: 'Schedule sessions preferably in the afternoon (1 PM–6 PM); use morning or evening only when needed.',
+  evening:   'Schedule sessions preferably in the evening (6 PM–9 PM); use other times only when needed.',
+  spread:    'Distribute sessions across morning, afternoon, and evening — avoid clustering them all at the same time of day.',
+};
+
+function buildPlanningPreferences(options: {splitBigWork: boolean; timePreference: TimePreference}) {
   const notes: string[] = [];
   if (options.splitBigWork) {
-    notes.push('Split larger assignments into smaller focused sessions when it helps.');
+    notes.push('Split larger tasks into smaller focused sessions when it helps.');
   }
-  if (options.avoidLateNightStudy) {
-    notes.push('Avoid late-night study sessions when possible and prefer daytime or early-evening work blocks.');
-  }
+  notes.push(TIME_PREF_PROMPT[options.timePreference]);
   return notes;
 }
 
@@ -206,10 +219,10 @@ function createNewDraftSession(existingBlocks: DraftPlanBlock[]): DraftPlanBlock
   const nextDate = existingBlocks.reduce<string>((acc, block) => (block.date > acc ? block.date : acc), today);
   return {
     id: createDraftId('draft-block'),
-    title: 'New study session',
+    title: 'New work session',
     date: nextDate,
-    startTime: 18 * 60,
-    endTime: 18 * 60 + 30,
+    startTime: 9 * 60,
+    endTime: 9 * 60 + 30,
     durationMinutes: 30,
     source: 'manual',
   };
@@ -267,75 +280,8 @@ function buildDraftPlan(plan: AIPlanResponse, proposedBlocks: ScheduledBlock[]):
   };
 }
 
-function buildMockDraftPlan(): DraftPlan {
-  const today = new Date();
-  const addDays = (count: number) => {
-    const next = new Date(today);
-    next.setDate(today.getDate() + count);
-    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
-  };
 
-  return {
-    source: 'mock',
-    reasoning: 'I drafted a balanced preview with shorter writing sessions first, then revision sessions closer to the deadlines.',
-    understoodItems: [
-      {
-        id: 'chemistry-test',
-        title: 'Chemistry test',
-        deadline: addDays(4),
-        estimatedMinutes: 240,
-        suggestedSessions: 3,
-      },
-      {
-        id: 'essay',
-        title: 'Essay',
-        deadline: addDays(2),
-        estimatedMinutes: 180,
-        suggestedSessions: 2,
-      },
-    ],
-    proposedBlocks: [
-      {
-        id: 'ai-mock-essay-writing',
-        title: 'Essay writing',
-        durationMinutes: 90,
-        date: addDays(1),
-        startTime: 17 * 60,
-        endTime: 18 * 60 + 30,
-        source: 'ai',
-      },
-      {
-        id: 'ai-mock-essay-review',
-        title: 'Essay final review',
-        durationMinutes: 60,
-        date: addDays(2),
-        startTime: 10 * 60,
-        endTime: 11 * 60,
-        source: 'ai',
-      },
-      {
-        id: 'ai-mock-chemistry-revision',
-        title: 'Chemistry revision',
-        durationMinutes: 90,
-        date: addDays(3),
-        startTime: 16 * 60,
-        endTime: 17 * 60 + 30,
-        source: 'ai',
-      },
-      {
-        id: 'ai-mock-chemistry-review',
-        title: 'Quick chemistry review',
-        durationMinutes: 60,
-        date: addDays(4),
-        startTime: 9 * 60,
-        endTime: 10 * 60,
-        source: 'ai',
-      },
-    ],
-  };
-}
-
-export default function Calendar({events, tasks = []}: CalendarProps) {
+export default function Calendar({events, tasks = [], onScheduledBlocksChange}: CalendarProps) {
   const initialView = (() => {
     try {
       const saved = sessionStorage.getItem('noted-ai-scheduler-view');
@@ -352,12 +298,13 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [latestDeadline, setLatestDeadline] = useState<string | null>(null);
   const [items, setItems] = useState<ScheduledBlock[]>([]);
+  useEffect(() => { onScheduledBlocksChange?.(items); }, [items, onScheduledBlocksChange]);
   const [draftPlan, setDraftPlan] = useState<DraftPlan | null>(null);
   const [isEditingDraft, setIsEditingDraft] = useState(false);
   const [draftBackupBeforeEdit, setDraftBackupBeforeEdit] = useState<DraftPlan | null>(null);
   const [includeDatedTasks, setIncludeDatedTasks] = useState(true);
   const [splitBigWork, setSplitBigWork] = useState(true);
-  const [avoidLateNightStudy, setAvoidLateNightStudy] = useState(false);
+  const [timePreference, setTimePreference] = useState<TimePreference>('spread');
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>(initialView);
   const [showOptions, setShowOptions] = useState(false);
   const [remaining, setRemaining] = useState(() => getRemainingAiRequests());
@@ -365,7 +312,7 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
   const [recurringExceptions, setRecurringExceptions] = useState<RecurringScheduleException[]>([]);
   const [showMySchedule, setShowMySchedule] = useState(false);
   const [myScheduleInitialChoice, setMyScheduleInitialChoice] = useState<'recurring' | 'onetime' | 'import' | null>(null);
-  const [quickAddMode, setQuickAddMode] = useState<'task' | 'event' | null>(null);
+  const [showManageEvents, setShowManageEvents] = useState(false);
   const [scheduleImports, setScheduleImports] = useState<ScheduleImport[]>([]);
   const [subjectColors, setSubjectColors] = useState<SubjectColor[]>([]);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
@@ -506,13 +453,18 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
     setIsEditingDraft(false);
     setDraftBackupBeforeEdit(null);
     try {
-      const planningPreferences = buildPlanningPreferences({splitBigWork, avoidLateNightStudy});
+      const planningPreferences = buildPlanningPreferences({splitBigWork, timePreference});
       const userText =
         planningPreferences.length > 0
           ? `${prompt.trim()}\n\nPlanning preferences:\n- ${planningPreferences.join('\n- ')}`
           : prompt.trim();
+      const _now = new Date();
+      const _pad = (n: number) => String(n).padStart(2, '0');
+      const currentDateTimeLocal = `${_now.getFullYear()}-${_pad(_now.getMonth() + 1)}-${_pad(_now.getDate())}T${_pad(_now.getHours())}:${_pad(_now.getMinutes())}`;
+
       const plan = await requestAiSchedule({
         userText,
+        currentDateTimeLocal,
         existingEvents: events.map(e => ({
           title: e.title,
           date: e.date,
@@ -532,6 +484,7 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
           startTime: item.startTime,
           endTime: item.endTime,
         })),
+        timePreference,
       });
       const aiBlocks: ScheduledBlock[] = blocks.map(block => ({
         ...block,
@@ -540,9 +493,8 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
       }));
       setDraftPlan(buildDraftPlan(plan, aiBlocks));
     } catch (e) {
-      setDraftPlan(buildMockDraftPlan());
-      setToast(e instanceof Error ? `${e.message} Showing a sample draft preview instead.` : 'Showing a sample draft preview instead.');
-      setError(null);
+      setDraftPlan(null);
+      setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
       void syncServerQuota();
@@ -824,9 +776,9 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
     await action();
   };
 
-  const handleQuickAdd = (type: 'task' | 'event' | 'routine' | 'import') => {
-    if (type === 'task' || type === 'event') {
-      setQuickAddMode(type);
+  const handleQuickAdd = (type: 'manage-events' | 'routine' | 'import') => {
+    if (type === 'manage-events') {
+      setShowManageEvents(true);
     } else if (type === 'routine') {
       setMyScheduleInitialChoice('recurring');
       setShowMySchedule(true);
@@ -836,7 +788,7 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
     }
   };
 
-  const handleSaveQuickBlock = async (data: QuickAddSaveData) => {
+  const handleSaveQuickBlock = async (data: EventSaveData) => {
     const [sh, sm] = data.startTime.split(':').map(Number);
     const [eh, em] = data.endTime.split(':').map(Number);
     const startMin = sh * 60 + sm;
@@ -911,39 +863,51 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
             >
               <ChevronDown size={12} className={`transition-transform duration-200 ${showOptions ? 'rotate-180' : ''}`} />
               Planning preferences
-              {(!includeDatedTasks || splitBigWork || avoidLateNightStudy) && (
+              {(!includeDatedTasks || splitBigWork || timePreference !== 'spread') && (
                 <span className="ml-0.5 flex h-1.5 w-1.5 rounded-full bg-rose-400" />
               )}
             </button>
             {showOptions && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-black/[0.06] bg-white/60 px-3.5 py-2 text-[12px] font-medium text-[#4B5563] backdrop-blur-sm transition-all hover:bg-white/80">
-                  <input
-                    type="checkbox"
-                    checked={includeDatedTasks}
-                    onChange={() => setIncludeDatedTasks(prev => !prev)}
-                    className="h-3.5 w-3.5 rounded border-[#CBD5E1] text-rose-500 focus:ring-rose-200"
-                  />
-                  Use existing tasks
-                </label>
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-black/[0.06] bg-white/60 px-3.5 py-2 text-[12px] font-medium text-[#4B5563] backdrop-blur-sm transition-all hover:bg-white/80">
-                  <input
-                    type="checkbox"
-                    checked={splitBigWork}
-                    onChange={() => setSplitBigWork(prev => !prev)}
-                    className="h-3.5 w-3.5 rounded border-[#CBD5E1] text-rose-500 focus:ring-rose-200"
-                  />
-                  Split big work into smaller sessions
-                </label>
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-black/[0.06] bg-white/60 px-3.5 py-2 text-[12px] font-medium text-[#4B5563] backdrop-blur-sm transition-all hover:bg-white/80">
-                  <input
-                    type="checkbox"
-                    checked={avoidLateNightStudy}
-                    onChange={() => setAvoidLateNightStudy(prev => !prev)}
-                    className="h-3.5 w-3.5 rounded border-[#CBD5E1] text-rose-500 focus:ring-rose-200"
-                  />
-                  Avoid late-night study
-                </label>
+              <div className="mt-3 flex flex-col gap-3">
+                <div className="flex flex-wrap gap-2">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-black/[0.06] bg-white/60 px-3.5 py-2 text-[12px] font-medium text-[#4B5563] backdrop-blur-sm transition-all hover:bg-white/80">
+                    <input
+                      type="checkbox"
+                      checked={includeDatedTasks}
+                      onChange={() => setIncludeDatedTasks(prev => !prev)}
+                      className="h-3.5 w-3.5 rounded border-[#CBD5E1] text-rose-500 focus:ring-rose-200"
+                    />
+                    Use existing tasks
+                  </label>
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-black/[0.06] bg-white/60 px-3.5 py-2 text-[12px] font-medium text-[#4B5563] backdrop-blur-sm transition-all hover:bg-white/80">
+                    <input
+                      type="checkbox"
+                      checked={splitBigWork}
+                      onChange={() => setSplitBigWork(prev => !prev)}
+                      className="h-3.5 w-3.5 rounded border-[#CBD5E1] text-rose-500 focus:ring-rose-200"
+                    />
+                    Split into smaller sessions
+                  </label>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-[#C4C9D4] mb-2">Preferred time of day</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(['morning', 'afternoon', 'evening', 'spread'] as TimePreference[]).map(pref => (
+                      <button
+                        key={pref}
+                        type="button"
+                        onClick={() => setTimePreference(pref)}
+                        className={`rounded-full border px-3.5 py-2 text-[12px] font-medium transition-all ${
+                          timePreference === pref
+                            ? 'border-[#18181b] bg-[#18181b] text-white'
+                            : 'border-black/[0.06] bg-white/60 text-[#4B5563] backdrop-blur-sm hover:bg-white/80'
+                        }`}
+                      >
+                        {TIME_PREF_LABELS[pref]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -992,11 +956,6 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
                   <span className="rounded-full border border-[#BFDBFE] bg-white px-2.5 py-1 text-[11px] font-medium text-[#2563EB]">
                     {isEditingDraft ? 'Editing draft' : 'Not saved yet'}
                   </span>
-                  {draftPlan.source === 'mock' && (
-                    <span className="rounded-full border border-[#E5E7EB] bg-white px-2.5 py-1 text-[11px] font-medium text-[#6B7280]">
-                      Sample preview
-                    </span>
-                  )}
                 </div>
                 <p className="mt-1 text-[13px] leading-6 text-[#6B7280]">
                   Review the suggested sessions before adding them to your calendar.
@@ -1353,11 +1312,12 @@ export default function Calendar({events, tasks = []}: CalendarProps) {
         </div>
       )}
 
-      {quickAddMode && (
-        <QuickAddModal
-          mode={quickAddMode}
-          onSave={handleSaveQuickBlock}
-          onClose={() => setQuickAddMode(null)}
+      {showManageEvents && (
+        <ManageEventsModal
+          items={items}
+          onAdd={handleSaveQuickBlock}
+          onDelete={deleteItem}
+          onClose={() => setShowManageEvents(false)}
         />
       )}
 

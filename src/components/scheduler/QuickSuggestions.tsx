@@ -4,18 +4,18 @@ type Props = {
 };
 
 const SUGGESTIONS = [
-  'I have a chemistry test next Friday and need to revise 5 chapters',
-  'Plan my finals over the next 2 weeks',
-  'I need to finish a 4-page essay by Wednesday',
-  'Help me organize my study time this week',
-  'I have 3 assignments due this week',
-  'Plan revision for maths and biology',
-  'Break down a project into daily tasks',
-  'I need to study for an exam and finish my notes',
-  'Create a balanced study schedule before Friday',
-  'I have classes, gym, and homework — help me plan everything',
-  'Prepare for my physics exam in 5 days',
-  'I have a presentation and two essays this week',
+  'I have a big project deadline next Friday — help me plan the week',
+  'Break down a project into daily tasks over the next 2 weeks',
+  'I need to finish a report by Wednesday',
+  'Help me plan a productive week around my existing commitments',
+  'I have 3 deliverables due this week — spread them out',
+  'Plan my work sessions for a product launch next Monday',
+  'I have meetings, a gym routine, and deep work — help me fit it all in',
+  'I need to prepare a presentation by Thursday',
+  'Create a balanced plan before an important deadline on Friday',
+  'Help me get through a heavy workload this week without burning out',
+  'I have a client call to prep for and two tasks due — plan my week',
+  'I need focused blocks to finish a design before end of month',
 ];
 
 const DOUBLED = [...SUGGESTIONS, ...SUGGESTIONS];

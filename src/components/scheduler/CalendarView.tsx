@@ -1,4 +1,4 @@
-import {CalendarPlus, ClipboardList, Plus, Repeat2, Upload, X} from 'lucide-react';
+import {CalendarRange, Plus, Repeat2, Upload, X} from 'lucide-react';
 import {useEffect, useMemo, useRef, useState} from 'react';
 import type {ScheduledBlock} from '../../types/scheduler';
 import BlockEditPopover from './BlockEditPopover';
@@ -7,7 +7,7 @@ import HourGrid from './HourGrid';
 import {useCalendarDrag, type DropPreview} from './useCalendarDrag';
 import ViewSwitcher from './ViewSwitcher';
 
-type QuickAddType = 'task' | 'event' | 'routine' | 'import';
+type QuickAddType = 'manage-events' | 'routine' | 'import';
 
 type Props = {
   items: ScheduledBlock[];
@@ -37,25 +37,18 @@ const QUICK_ADD_OPTIONS: Array<{
   iconCls: string;
 }> = [
   {
-    type: 'task',
-    Icon: ClipboardList,
-    label: 'Add task',
-    desc: 'Create a one-off task',
-    iconCls: 'border-sky-100/80 bg-sky-50/60 text-sky-500',
-  },
-  {
-    type: 'event',
-    Icon: CalendarPlus,
-    label: 'Add event',
-    desc: 'Schedule a calendar event',
-    iconCls: 'border-indigo-100/80 bg-indigo-50/60 text-indigo-500',
+    type: 'manage-events',
+    Icon: CalendarRange,
+    label: 'Manage events',
+    desc: 'Add or view your scheduled events',
+    iconCls: 'border-violet-100/80 bg-violet-50/60 text-violet-500',
   },
   {
     type: 'routine',
     Icon: Repeat2,
     label: 'Add recurring routine',
     desc: 'Create something that repeats weekly',
-    iconCls: 'border-violet-100/80 bg-violet-50/60 text-violet-500',
+    iconCls: 'border-indigo-100/80 bg-indigo-50/60 text-indigo-500',
   },
   {
     type: 'import',

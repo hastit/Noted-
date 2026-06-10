@@ -9,8 +9,17 @@ const endpoint =
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
 let inFlightRequest: Promise<AIPlanResponse> | null = null;
 
-function friendlyError(message: string) {
-  return new Error(message);
+export type AiErrorType = 'quota_exceeded' | 'service_busy' | 'unknown';
+
+export class AiScheduleError extends Error {
+  constructor(message: string, public readonly type: AiErrorType) {
+    super(message);
+    this.name = 'AiScheduleError';
+  }
+}
+
+function friendlyError(message: string, type: AiErrorType = 'unknown') {
+  return new AiScheduleError(message, type);
 }
 
 function parseJsonPlan(raw: unknown): AIPlanResponse {
@@ -36,6 +45,7 @@ export async function requestAiSchedule(input: {
   userText: string;
   existingEvents: Array<{title: string; date: string; startTime: number; endTime: number}>;
   datedTasks: Array<{title: string; dueDate: string; status: string}>;
+  currentDateTimeLocal: string;
 }): Promise<AIPlanResponse> {
   if (inFlightRequest) return inFlightRequest;
 
@@ -45,6 +55,7 @@ export async function requestAiSchedule(input: {
       userText: input.userText,
       existingEvents: input.existingEvents ?? [],
       datedTasks: input.datedTasks ?? [],
+      currentDateTimeLocal: input.currentDateTimeLocal,
     };
     const {
       data: {session},
@@ -67,17 +78,22 @@ export async function requestAiSchedule(input: {
       const rawBody = await res.text().catch(() => '');
       console.error('[AI Schedule] HTTP', res.status, 'from', endpoint, '— raw body:', rawBody);
       let serverMessage = '';
+      let serverType: AiErrorType = 'unknown';
       try {
-        const errPayload = JSON.parse(rawBody) as {error?: unknown; message?: unknown; code?: unknown};
+        const errPayload = JSON.parse(rawBody) as {error?: unknown; message?: unknown; code?: unknown; type?: unknown};
         serverMessage =
           typeof errPayload.error === 'string' ? errPayload.error
           : typeof errPayload.message === 'string' ? errPayload.message
           : typeof errPayload.code === 'string' ? errPayload.code
           : '';
+        if (errPayload.type === 'service_busy' || res.status === 503) serverType = 'service_busy';
+        else if (res.status === 429) serverType = 'quota_exceeded';
       } catch {
         serverMessage = '';
+        if (res.status === 503) serverType = 'service_busy';
+        else if (res.status === 429) serverType = 'quota_exceeded';
       }
-      throw friendlyError(serverMessage || `Server returned ${res.status}. Check the browser console for details.`);
+      throw friendlyError(serverMessage || `Server returned ${res.status}. Check the browser console for details.`, serverType);
     }
     const payload = (await res.json()) as {plan?: unknown};
     return parseJsonPlan(payload.plan);

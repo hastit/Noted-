@@ -7,6 +7,7 @@ type RequestBody = {
   userText?: string;
   existingEvents?: Array<{title: string; date: string; startTime: number; endTime: number}>;
   datedTasks?: Array<{title: string; dueDate: string; status: string}>;
+  currentDateTimeLocal?: string; // "YYYY-MM-DDTHH:MM" in the user's local time
 };
 
 function ymd(date: Date) {
@@ -90,9 +91,13 @@ Deno.serve(async req => {
       return jsonResponse({error: 'Please describe what you need to schedule.'}, 400);
     }
 
-    const today = new Date();
-    const todayIso = today.toISOString().slice(0, 10);
-    const rangeEnd = new Date(today);
+    // Prefer the client's local date/time so the AI respects the user's timezone.
+    const localDtRaw = typeof body.currentDateTimeLocal === 'string' ? body.currentDateTimeLocal : '';
+    const localDtMatch = localDtRaw.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})$/);
+    const todayIso = localDtMatch ? localDtMatch[1] : new Date().toISOString().slice(0, 10);
+    const currentTimeLocal = localDtMatch ? localDtMatch[2] : ''; // "HH:MM" or ''
+
+    const rangeEnd = new Date(`${todayIso}T12:00:00`);
     rangeEnd.setDate(rangeEnd.getDate() + 60);
     const rangeEndIso = ymd(rangeEnd);
 
@@ -139,8 +144,13 @@ Deno.serve(async req => {
       }
     }
 
+    const timeContext = currentTimeLocal
+      ? `The current local time is ${currentTimeLocal}. For today (${todayIso}), only suggest tasks that start strictly after ${currentTimeLocal} — never schedule anything at or before the current time. If little time remains today, skip today and start from tomorrow.`
+      : `Never schedule tasks in the past.`;
+
     const systemPrompt =
-      `You are a scheduling assistant. Today is ${todayIso}. All scheduled days must be >= today. Never schedule tasks in the past. ` +
+      `You are a scheduling assistant. Today is ${todayIso}. ${timeContext} ` +
+      'All suggested_day values must be >= today. ' +
       'Distribute work across multiple days leading up to the deadline rather than cramming it all on the deadline day. ' +
       'Respect recurring commitments and never schedule inside those occupied slots. ' +
       'Return strict JSON only with keys: subtasks, deadline, reasoning. ' +
@@ -153,13 +163,6 @@ Deno.serve(async req => {
       recurringBusySlots: recurringBusy,
       datedTasks: body.datedTasks ?? [],
     });
-
-    const {error: insertError} = await supabase
-      .from('ai_request_logs')
-      .insert({user_id: user.id, request_type: 'ai_schedule'});
-    if (insertError) {
-      return jsonResponse({error: 'Unable to register AI usage right now. Please retry.'}, 503);
-    }
 
     const geminiUrl =
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -207,9 +210,12 @@ Deno.serve(async req => {
       const errorText = await geminiRes.text();
       console.error('Gemini API error:', geminiRes.status, errorText);
       if (geminiRes.status === 429) {
-        return jsonResponse({error: 'AI request limit reached for now. Please try again later.', debug: errorText}, 429);
+        return jsonResponse({
+          error: 'The AI service is momentarily busy — this does not use your daily limit. Please wait a moment and try again.',
+          type: 'service_busy',
+        }, 503);
       }
-      return jsonResponse({error: 'AI is temporarily unavailable. Please retry soon.', debug: errorText}, 502);
+      return jsonResponse({error: 'AI is temporarily unavailable. Please retry soon.', type: 'service_busy'}, 503);
     }
 
     const payload = (await geminiRes.json()) as {
@@ -233,6 +239,15 @@ Deno.serve(async req => {
     }
     if (!(plan as any)?.deadline) {
       return jsonResponse({error: 'We could not detect a deadline. Please include a clear due date and retry.'}, 422);
+    }
+
+    // Log only after a successful generation so failed Gemini calls don't consume quota.
+    const {error: insertError} = await supabase
+      .from('ai_request_logs')
+      .insert({user_id: user.id, request_type: 'ai_schedule'});
+    if (insertError) {
+      console.error('Failed to log AI request:', insertError);
+      // Don't block the response — the user got their plan, logging is best-effort.
     }
 
     return jsonResponse({plan, remaining: Math.max(0, 15 - (count + 1))});

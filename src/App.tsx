@@ -9,6 +9,8 @@ import {
   Settings as SettingsIcon,
 } from 'lucide-react';
 import {TabType, CalendarEvent, Tag, Notebook, Folder, Note, QuickNote, Task} from './types';
+import type {ScheduledBlock} from './types/scheduler';
+import {fetchAllBlocks} from './services/scheduledBlocksService';
 import {DEFAULT_TAGS} from './constants';
 import Dashboard from './components/Dashboard';
 import Tasks from './components/Tasks';
@@ -28,7 +30,7 @@ import * as notebooksService from './lib/notebooks';
 import * as foldersService from './lib/folders';
 import * as quickNotesService from './lib/quickNotes';
 import {isRecoveryImplicitHash} from './lib/authRecoveryHash';
-import {DashboardThemeId, DEFAULT_DASHBOARD_THEME, getDashboardTheme} from './lib/dashboardThemes';
+import {DashboardThemeId, DEFAULT_DASHBOARD_THEME} from './lib/dashboardThemes';
 
 const Landing = lazy(() => import('./pages/Landing'));
 
@@ -143,6 +145,7 @@ function AuthenticatedApp() {
   const [notesImmersive, setNotesImmersive] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [scheduledBlocks, setScheduledBlocks] = useState<ScheduledBlock[]>([]);
   const [tags, setTags] = useState<Tag[]>(DEFAULT_TAGS);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notebooks, setNotebooksState] = useState<Notebook[]>([]);
@@ -222,13 +225,14 @@ function AuthenticatedApp() {
     (async () => {
       setDataLoading(true);
       try {
-        const [n, t, e, nbs, flds, qn] = await Promise.all([
+        const [n, t, e, nbs, flds, qn, sb] = await Promise.all([
           notesService.getNotes(),
           tasksService.getTasks(),
           calendarService.getEvents(),
           notebooksService.getNotebooks(),
           foldersService.getFolders(),
           quickNotesService.getQuickNotes(),
+          fetchAllBlocks(),
         ]);
         if (!cancelled) {
           setNotes(n);
@@ -237,6 +241,7 @@ function AuthenticatedApp() {
           setNotebooksState(nbs);
           setFoldersState(flds);
           setQuickNotesState(qn);
+          setScheduledBlocks(sb);
         }
       } catch (e) {
         console.error(e);
@@ -319,6 +324,21 @@ function AuthenticatedApp() {
     return () => window.clearInterval(id);
   }, [remoteTasks]);
 
+  const dashboardEvents = useMemo<CalendarEvent[]>(
+    () => [
+      ...events,
+      ...scheduledBlocks.map(b => ({
+        id: b.id,
+        title: b.title,
+        date: b.date,
+        startTime: b.startTime,
+        endTime: b.endTime,
+        tagId: '',
+      })),
+    ],
+    [events, scheduledBlocks],
+  );
+
   const remoteEvents = useMemo(
     () => ({
       create: (ev: Omit<CalendarEvent, 'id'>) => calendarService.createEvent(ev),
@@ -336,8 +356,6 @@ function AuthenticatedApp() {
     {id: 'settings', label: t('settings'), icon: SettingsIcon},
   ];
 
-  const theme = getDashboardTheme(dashboardTheme);
-
   useEffect(() => {
     saveLS(LS_DASHBOARD_THEME, dashboardTheme);
   }, [dashboardTheme]);
@@ -348,12 +366,6 @@ function AuthenticatedApp() {
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden relative min-h-0">
-      {activeTab === 'dashboard' && (
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[430px] md:h-[520px]">
-          <div className="absolute inset-0" style={{background: theme.gradient}} />
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/[0.04] to-white" />
-        </div>
-      )}
 
       {dataLoading && (
         <div className="absolute inset-0 z-[150] flex flex-col items-center justify-center bg-[#f8f9fa]/80 backdrop-blur-[2px] pointer-events-none">
@@ -435,7 +447,7 @@ function AuthenticatedApp() {
           >
             {activeTab === 'dashboard' && (
               <Dashboard
-                events={events}
+                events={dashboardEvents}
                 tags={tags}
                 notebooks={mergedNotebooks}
                 notes={notes}
@@ -486,14 +498,12 @@ function AuthenticatedApp() {
                 tags={tags}
                 onEventsChange={setEvents}
                 onTagsChange={setTags}
+                onScheduledBlocksChange={setScheduledBlocks}
                 tasks={tasks}
               />
             )}
             {activeTab === 'settings' && (
-              <Settings
-                dashboardTheme={dashboardTheme}
-                onDashboardThemeChange={setDashboardTheme}
-              />
+              <Settings />
             )}
           </motion.div>
         </AnimatePresence>

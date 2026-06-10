@@ -1,11 +1,26 @@
 import type {CalendarEvent, Task} from '../types';
 import type {AISubtask, DayScheduleGroup, ScheduledBlock} from '../types/scheduler';
 
+export type TimePreference = 'morning' | 'afternoon' | 'evening' | 'spread';
+
 type BusySlot = {date: string; start: number; end: number};
 
-const DAY_START = 9 * 60;
-const DAY_END = 21 * 60;
 const STEP = 15;
+
+// Time bands in minutes from midnight
+const BANDS: Record<string, [number, number]> = {
+  morning:   [8 * 60,  13 * 60],
+  afternoon: [13 * 60, 18 * 60],
+  evening:   [18 * 60, 21 * 60],
+};
+
+const BAND_ORDER_BY_PREF: Record<TimePreference, Array<[number, number]>> = {
+  morning:   [BANDS.morning, BANDS.afternoon, BANDS.evening],
+  afternoon: [BANDS.afternoon, BANDS.morning, BANDS.evening],
+  evening:   [BANDS.evening, BANDS.afternoon, BANDS.morning],
+  // spread cycles: task 0 → morning-first, task 1 → afternoon-first, task 2 → evening-first
+  spread:    [BANDS.morning, BANDS.afternoon, BANDS.evening],
+};
 
 function toDate(value: string) {
   return new Date(`${value}T12:00:00`);
@@ -44,24 +59,40 @@ function collides(slots: BusySlot[], date: string, start: number, end: number) {
   return slots.some(s => s.date === date && !(end <= s.start || start >= s.end));
 }
 
-function placeBackward(
+function findSlotInBand(
   slots: BusySlot[],
-  targetDate: string,
-  durationMinutes: number,
-  earliestDate: string,
-): {date: string; start: number; end: number} | null {
-  let date = clampDate(targetDate, earliestDate, targetDate);
-  let safety = 0;
-  while (safety < 365) {
-    for (let end = DAY_END; end >= DAY_START + durationMinutes; end -= STEP) {
-      const start = end - durationMinutes;
-      if (!collides(slots, date, start, end)) return {date, start, end};
-    }
-    if (date <= earliestDate) break;
-    date = previousDay(date);
-    safety += 1;
+  date: string,
+  duration: number,
+  bandStart: number,
+  bandEnd: number,
+): number | null {
+  for (let start = bandStart; start + duration <= bandEnd; start += STEP) {
+    if (!collides(slots, date, start, start + duration)) return start;
   }
   return null;
+}
+
+function placeOnDay(
+  slots: BusySlot[],
+  date: string,
+  duration: number,
+  bandOrder: Array<[number, number]>,
+): {start: number; end: number} | null {
+  for (const [bandStart, bandEnd] of bandOrder) {
+    const start = findSlotInBand(slots, date, duration, bandStart, bandEnd);
+    if (start !== null) return {start, end: start + duration};
+  }
+  return null;
+}
+
+function getBandOrder(preference: TimePreference, phase: number): Array<[number, number]> {
+  if (preference !== 'spread') return BAND_ORDER_BY_PREF[preference];
+  const phases: Array<Array<[number, number]>> = [
+    [BANDS.morning, BANDS.afternoon, BANDS.evening],
+    [BANDS.afternoon, BANDS.evening, BANDS.morning],
+    [BANDS.evening, BANDS.morning, BANDS.afternoon],
+  ];
+  return phases[phase % 3];
 }
 
 function listDays(fromDate: string, toDate: string) {
@@ -81,8 +112,9 @@ export function buildScheduleFromAiPlan(args: {
   deadline: string;
   existingEvents: CalendarEvent[];
   recurringBusySlots?: Array<{date: string; startTime: number; endTime: number}>;
+  timePreference?: TimePreference;
 }): ScheduledBlock[] {
-  const {subtasks, deadline, existingEvents, recurringBusySlots = []} = args;
+  const {subtasks, deadline, existingEvents, recurringBusySlots = [], timePreference = 'spread'} = args;
   const today = fmtDate(new Date());
   const busy: BusySlot[] = existingEvents.map(e => ({date: e.date, start: e.startTime, end: e.endTime}));
   for (const slot of recurringBusySlots) {
@@ -98,6 +130,8 @@ export function buildScheduleFromAiPlan(args: {
   const daysByLoad = new Map<string, number>();
   for (const d of listDays(today, deadline)) daysByLoad.set(d, 0);
 
+  let spreadPhase = 0;
+
   for (const task of tasks) {
     const duration = Math.max(15, Math.min(8 * 60, Math.round(task.estimated_minutes / 5) * 5));
     const suggested = task.suggested_day && /^\d{4}-\d{2}-\d{2}$/.test(task.suggested_day) ? task.suggested_day : null;
@@ -110,20 +144,42 @@ export function buildScheduleFromAiPlan(args: {
 
     if (!candidateDays.length) candidateDays = [preferredDay];
 
+    const bandOrder = getBandOrder(timePreference, spreadPhase);
+
     let placement: {date: string; start: number; end: number} | null = null;
     for (const day of candidateDays) {
-      placement = placeBackward(busy, day, duration, today);
-      if (placement) break;
+      const slot = placeOnDay(busy, day, duration, bandOrder);
+      if (slot) {
+        placement = {date: day, ...slot};
+        break;
+      }
     }
-    if (!placement) placement = placeBackward(busy, deadline, duration, today);
+
+    // Fallback: try all bands on the deadline day
     if (!placement) {
+      const allBands: Array<[number, number]> = [BANDS.morning, BANDS.afternoon, BANDS.evening];
+      let date = deadline;
+      let safety = 0;
+      while (!placement && safety < 60) {
+        const slot = placeOnDay(busy, date, duration, allBands);
+        if (slot) {
+          placement = {date, ...slot};
+        } else {
+          date = previousDay(date);
+        }
+        safety++;
+      }
+    }
+
+    if (!placement) {
+      const [, bandEnd] = BANDS.evening;
       blocks.push({
         id: `ai-unfit-${Math.random().toString(36).slice(2, 10)}`,
         title: `${task.title} (couldn't fit)`,
         durationMinutes: duration,
         date: deadline,
-        startTime: DAY_END - duration,
-        endTime: DAY_END,
+        startTime: bandEnd - duration,
+        endTime: bandEnd,
         source: 'ai',
       });
       continue;
@@ -131,6 +187,7 @@ export function buildScheduleFromAiPlan(args: {
 
     addBusySlot(busy, {date: placement.date, start: placement.start, end: placement.end});
     daysByLoad.set(placement.date, (daysByLoad.get(placement.date) ?? 0) + duration);
+    spreadPhase++;
     blocks.push({
       id: `ai-${Math.random().toString(36).slice(2, 10)}`,
       title: task.title,

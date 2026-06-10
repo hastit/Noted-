@@ -333,9 +333,12 @@ function ConfettiPieces({ color }: { color: string }) {
 export default function PomodoroTimer({
   onClose,
   embedded = false,
+  compact = false,
 }: {
   onClose?: () => void;
   embedded?: boolean;
+  /** Compact layout for dashboard hero — no plant, tighter controls */
+  compact?: boolean;
 }) {
   const {
     mode, timeLeft, isRunning, sessions, completedMode, nextMode,
@@ -379,9 +382,11 @@ export default function PomodoroTimer({
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: embedded ? 0.3 : 0.45, ease: [0.23, 1, 0.32, 1] }}
         className={
-          embedded
-            ? 'w-full shrink-0 bg-white rounded-2xl shadow-md border border-black/[0.06] overflow-hidden relative'
-            : 'w-full max-w-[420px] shrink-0 bg-white rounded-2xl max-md:rounded-2xl md:rounded-3xl shadow-xl border border-black/[0.06] max-md:overflow-visible md:overflow-hidden relative'
+          compact
+            ? 'w-full shrink-0 overflow-hidden relative'
+            : embedded
+              ? 'w-full shrink-0 bg-white rounded-2xl shadow-md border border-black/[0.06] overflow-hidden relative'
+              : 'w-full max-w-[420px] shrink-0 bg-white rounded-2xl max-md:rounded-2xl md:rounded-3xl shadow-xl border border-black/[0.06] max-md:overflow-visible md:overflow-hidden relative'
         }
       >
         {/* ── Completion overlay ── */}
@@ -470,9 +475,11 @@ export default function PomodoroTimer({
         {/* Mode tabs */}
         <div
           className={
-            embedded
-              ? 'flex px-4 sm:px-6 gap-2 pt-4 sm:pt-5'
-              : 'flex px-3 max-md:px-3 md:px-5 gap-1.5 max-md:gap-1.5 md:gap-2 pt-3 max-md:pt-3 md:pt-5'
+            compact
+              ? 'flex px-5 gap-1.5 pt-4'
+              : embedded
+                ? 'flex px-4 sm:px-6 gap-2 pt-4 sm:pt-5'
+                : 'flex px-3 max-md:px-3 md:px-5 gap-1.5 max-md:gap-1.5 md:gap-2 pt-3 max-md:pt-3 md:pt-5'
           }
         >
           {(Object.keys(MODES) as Mode[]).map(m => (
@@ -492,63 +499,94 @@ export default function PomodoroTimer({
         {/* Mobile : colonne ; desktop / mode intégré : ligne */}
         <div
           className={
-            embedded
-              ? 'flex flex-col sm:flex-row px-4 sm:px-6 pt-4 pb-6 sm:pb-8 gap-8 sm:gap-10 items-center sm:items-end justify-center sm:justify-between min-w-0'
-              : 'flex flex-col md:flex-row px-3 max-md:px-3 md:px-5 pt-2 max-md:pt-2 md:pt-3 pb-4 max-md:pb-4 md:pb-5 gap-3 max-md:gap-3 md:gap-6 md:items-end min-w-0'
+            compact
+              ? 'flex flex-row items-center gap-4 px-5 pt-3 pb-5 min-w-0'
+              : embedded
+                ? 'flex flex-col sm:flex-row px-4 sm:px-6 pt-4 pb-6 sm:pb-8 gap-8 sm:gap-10 items-center sm:items-end justify-center sm:justify-between min-w-0'
+                : 'flex flex-col md:flex-row px-3 max-md:px-3 md:px-5 pt-2 max-md:pt-2 md:pt-3 pb-4 max-md:pb-4 md:pb-5 gap-3 max-md:gap-3 md:gap-6 md:items-end min-w-0'
           }
         >
           {/* Plante */}
-          <div
-            className={
-              embedded
-                ? 'w-[11rem] h-[13.5rem] sm:w-48 sm:h-[14.5rem] shrink-0'
-                : 'w-[7.5rem] h-[9.25rem] max-md:mx-auto md:w-44 md:h-56 shrink-0 max-md:max-h-[40vh]'
-            }
-          >
-            <PlantScene progress={progress} mode={mode} />
-          </div>
+          {!compact && (
+            <div
+              className={
+                embedded
+                  ? 'w-[11rem] h-[13.5rem] sm:w-48 sm:h-[14.5rem] shrink-0'
+                  : 'w-[7.5rem] h-[9.25rem] max-md:mx-auto md:w-44 md:h-56 shrink-0 max-md:max-h-[40vh]'
+              }
+            >
+              <PlantScene progress={progress} mode={mode} />
+            </div>
+          )}
 
           {/* Timer + contrôles */}
           <div
             className={
-              embedded
-                ? 'flex-1 min-w-0 w-full max-w-md flex flex-col items-center gap-3 sm:gap-4 pb-0.5'
-                : 'flex-1 min-h-0 flex flex-col items-center gap-2.5 max-md:gap-2.5 md:gap-4 pb-1 max-md:pb-1 md:pb-2 w-full'
+              compact
+                ? 'flex flex-1 min-w-0 items-center justify-between gap-3'
+                : embedded
+                  ? 'flex-1 min-w-0 w-full max-w-md flex flex-col items-center gap-3 sm:gap-4 pb-0.5'
+                  : 'flex-1 min-h-0 flex flex-col items-center gap-2.5 max-md:gap-2.5 md:gap-4 pb-1 max-md:pb-1 md:pb-2 w-full'
             }
           >
             {/* Time display */}
             <div
-              className="w-full rounded-xl max-md:rounded-xl md:rounded-2xl py-3 max-md:py-3 md:py-4 flex flex-col items-center"
+              className={
+                compact
+                  ? 'rounded-2xl py-2.5 px-4 flex flex-col items-center shrink-0'
+                  : 'w-full rounded-xl max-md:rounded-xl md:rounded-2xl py-3 max-md:py-3 md:py-4 flex flex-col items-center'
+              }
               style={{ backgroundColor: currentMode.bg }}
             >
               <span
-                className="text-[2.25rem] max-md:text-[2.25rem] md:text-[46px] font-bold tabular-nums tracking-tight leading-none"
+                className={
+                  compact
+                    ? 'text-[2rem] font-bold tabular-nums tracking-tight leading-none'
+                    : 'text-[2.25rem] max-md:text-[2.25rem] md:text-[46px] font-bold tabular-nums tracking-tight leading-none'
+                }
                 style={{ color: currentMode.color }}
               >
                 {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
               </span>
-              <span className="text-[9px] max-md:text-[9px] md:text-[10px] font-bold uppercase tracking-[0.18em] mt-1 max-md:mt-1 md:mt-1.5" style={{ color: `${currentMode.color}99` }}>
+              <span
+                className={
+                  compact
+                    ? 'text-[10px] font-semibold mt-0.5'
+                    : 'text-[9px] max-md:text-[9px] md:text-[10px] font-bold uppercase tracking-[0.18em] mt-1 max-md:mt-1 md:mt-1.5'
+                }
+                style={{ color: `${currentMode.color}99` }}
+              >
                 {currentMode.label}
               </span>
             </div>
 
             {/* Session dots */}
-            <div className="flex items-center gap-2">
-              {[0, 1, 2, 3].map(i => (
-                <div
-                  key={i}
-                  className="w-2 h-2 rounded-full transition-all duration-300"
-                  style={{
-                    backgroundColor: i < focusSessionsDone ? currentMode.color : 'rgba(0,0,0,0.1)',
-                    transform: i < focusSessionsDone ? 'scale(1.3)' : 'scale(1)',
-                  }}
-                />
-              ))}
-            </div>
-            <span className="text-[10px] text-black/25 font-medium -mt-1 md:-mt-2">{sessions} sessions done</span>
+            {!compact && (
+              <>
+                <div className="flex items-center gap-2">
+                  {[0, 1, 2, 3].map(i => (
+                    <div
+                      key={i}
+                      className="w-2 h-2 rounded-full transition-all duration-300"
+                      style={{
+                        backgroundColor: i < focusSessionsDone ? currentMode.color : 'rgba(0,0,0,0.1)',
+                        transform: i < focusSessionsDone ? 'scale(1.3)' : 'scale(1)',
+                      }}
+                    />
+                  ))}
+                </div>
+                <span className="text-[10px] text-black/25 font-medium -mt-1 md:-mt-2">{sessions} sessions done</span>
+              </>
+            )}
 
             {/* Controls — toujours visibles sous le chrono sur mobile */}
-            <div className="flex items-center justify-center gap-3 max-md:gap-3 pt-1 max-md:pt-1 w-full">
+            <div
+              className={
+                compact
+                  ? 'flex items-center gap-2 shrink-0'
+                  : 'flex items-center justify-center gap-3 max-md:gap-3 pt-1 max-md:pt-1 w-full'
+              }
+            >
               <button
                 onClick={handleReset}
                 className="w-10 h-10 max-md:w-10 max-md:h-10 md:w-9 md:h-9 rounded-xl bg-black/[0.04] hover:bg-black/[0.08] flex items-center justify-center text-black/35 hover:text-black/60 transition-all active:scale-95 shrink-0"
@@ -578,12 +616,19 @@ export default function PomodoroTimer({
             </div>
 
             {/* Status */}
-            <p className="text-[10px] text-black/25 font-medium text-center leading-relaxed px-1 max-md:px-1 pb-0.5">
-              {mode === 'focus'
-                ? `${4 - focusSessionsDone} more until long break`
-                : mode === 'short' ? 'Short break — you earned it!'
-                : 'Long break — time to recharge'}
-            </p>
+            {!compact && (
+              <p className="text-[10px] text-black/25 font-medium text-center leading-relaxed px-1 max-md:px-1 pb-0.5">
+                {mode === 'focus'
+                  ? `${4 - focusSessionsDone} more until long break`
+                  : mode === 'short' ? 'Short break — you earned it!'
+                  : 'Long break — time to recharge'}
+              </p>
+            )}
+            {compact && (
+              <p className="hidden sm:block text-[11px] text-[#6B7280] font-medium max-w-[8rem] leading-snug">
+                {sessions} session{sessions !== 1 ? 's' : ''} today
+              </p>
+            )}
           </div>
         </div>
       </motion.div>
