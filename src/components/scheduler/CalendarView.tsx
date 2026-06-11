@@ -541,23 +541,27 @@ export default function CalendarView({items, deadline, onUpdate, onDelete, onQui
         </div>
       </div>
 
-      {selected && (
-        <BlockEditPopover
-          block={selected.block}
-          anchorRect={selected.rect}
-          onClose={() => setSelected(null)}
-          onSave={updated => {
-            onUpdate(updated.id, {
-              title: updated.title,
-              date: updated.date,
-              startTime: updated.startTime,
-              endTime: updated.endTime,
-              durationMinutes: updated.durationMinutes,
-            });
-          }}
-          onDelete={id => onDelete(id)}
-        />
-      )}
+      {(() => {
+        if (!selected) return null;
+        const origBlock = selected.block;
+        return (
+          <BlockEditPopover
+            block={origBlock}
+            anchorRect={selected.rect}
+            onClose={() => setSelected(null)}
+            onSave={updated => {
+              const patch: Partial<ScheduledBlock> = {};
+              if (updated.title !== origBlock.title) patch.title = updated.title;
+              if (updated.date !== origBlock.date) patch.date = updated.date;
+              if (updated.startTime !== origBlock.startTime) patch.startTime = updated.startTime;
+              if (updated.endTime !== origBlock.endTime) patch.endTime = updated.endTime;
+              if (updated.durationMinutes !== origBlock.durationMinutes) patch.durationMinutes = updated.durationMinutes;
+              if (Object.keys(patch).length > 0) onUpdate(updated.id, patch);
+            }}
+            onDelete={id => onDelete(id)}
+          />
+        );
+      })()}
 
       {/* ── Floating drag clone (fixed, follows cursor) ── */}
       {dragVisual && draggingId && (() => {
