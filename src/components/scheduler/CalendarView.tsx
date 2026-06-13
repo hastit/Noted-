@@ -570,7 +570,7 @@ export default function CalendarView({items, deadline, onUpdate, onDelete, onQui
       {(() => {
         if (!selected) return null;
         const origBlock = selected.block;
-        return (
+        return createPortal(
           <BlockEditPopover
             block={origBlock}
             anchorRect={selected.rect}
@@ -588,7 +588,8 @@ export default function CalendarView({items, deadline, onUpdate, onDelete, onQui
             tags={tags}
             onAssignTag={onAssignTag}
             onTagsChange={onTagsChange}
-          />
+          />,
+          document.body,
         );
       })()}
 
