@@ -1,7 +1,7 @@
 import {CalendarRange, Plus, Repeat2, Upload, X} from 'lucide-react';
 import {createPortal} from 'react-dom';
 import {useEffect, useMemo, useRef, useState} from 'react';
-import type {ScheduledBlock} from '../../types/scheduler';
+import type {CalendarTag, ScheduledBlock} from '../../types/scheduler';
 import BlockEditPopover from './BlockEditPopover';
 import CalendarBlock from './CalendarBlock';
 import HourGrid from './HourGrid';
@@ -22,9 +22,12 @@ type Props = {
   onUpdate: (id: string, patch: Partial<ScheduledBlock>) => void;
   onDelete: (id: string) => void;
   onQuickAdd?: (type: QuickAddType) => void;
-  onSlotCreate?: (dayKey: string, startMinute: number, durationMinutes: number, title: string) => void;
+  onSlotCreate?: (dayKey: string, startMinute: number, durationMinutes: number, title: string, tagId?: string) => void;
   onCommitRecurringDrop?: (block: ScheduledBlock, preview: DropPreview) => Promise<{undoId: string}>;
   onUndoRecurringDrop?: (undoId: string) => Promise<void>;
+  tags?: CalendarTag[];
+  onTagsChange?: (tags: CalendarTag[]) => void;
+  onAssignTag?: (blockId: string, tagId: string | null) => void;
 };
 
 type SubView = 'day' | 'week';
@@ -152,7 +155,7 @@ function TimeColumn({rowHeight}: {rowHeight: number}) {
   );
 }
 
-export default function CalendarView({items, deadline, onUpdate, onDelete, onQuickAdd, onSlotCreate, onCommitRecurringDrop, onUndoRecurringDrop}: Props) {
+export default function CalendarView({items, deadline, onUpdate, onDelete, onQuickAdd, onSlotCreate, onCommitRecurringDrop, onUndoRecurringDrop, tags = [], onTagsChange, onAssignTag}: Props) {
   const [subView, setSubView] = useState<SubView>('week');
   const [cursorDate, setCursorDate] = useState<Date>(new Date());
   const [selected, setSelected] = useState<{block: ScheduledBlock; rect: DOMRect} | null>(null);
@@ -175,6 +178,10 @@ export default function CalendarView({items, deadline, onUpdate, onDelete, onQui
   const [slotTitle, setSlotTitle] = useState('');
   const [slotDuration, setSlotDuration] = useState(60);
   const slotInputRef = useRef<HTMLInputElement | null>(null);
+  const [slotTagId, setSlotTagId] = useState<string | null>(null);
+  const [slotTagCreating, setSlotTagCreating] = useState(false);
+  const [slotNewTagName, setSlotNewTagName] = useState('');
+  const [slotNewTagColor, setSlotNewTagColor] = useState('#6366F1');
 
   const rowHeight = isMobile ? HOUR_ROW_HEIGHT_PX.mobile : HOUR_ROW_HEIGHT_PX.desktop;
   const pxPerMinute = rowHeight / 60;
@@ -258,7 +265,7 @@ export default function CalendarView({items, deadline, onUpdate, onDelete, onQui
   }, [rowHeight, subView, cursorDate]); // intentionally excludes `now` — clock ticks must not re-scroll
 
   const POPOVER_W = 228;
-  const POPOVER_H = 152;
+  const POPOVER_H = 290;
 
   const openSlotAdd = (dayKey: string, hour: number, slotEl: HTMLElement) => {
     if (!onSlotCreate) return;
@@ -271,14 +278,35 @@ export default function CalendarView({items, deadline, onUpdate, onDelete, onQui
     setSlotAdd({dayKey, hour, pos: {top, left, openLeft}});
     setSlotTitle('');
     setSlotDuration(60);
+    setSlotTagId(null);
+    setSlotTagCreating(false);
+    setSlotNewTagName('');
+    setSlotNewTagColor('#6366F1');
     setTimeout(() => slotInputRef.current?.focus(), 30);
   };
 
   const commitSlotAdd = () => {
     if (!slotAdd || !slotTitle.trim() || !onSlotCreate) return;
-    onSlotCreate(slotAdd.dayKey, slotAdd.hour * 60, slotDuration, slotTitle.trim());
+    onSlotCreate(slotAdd.dayKey, slotAdd.hour * 60, slotDuration, slotTitle.trim(), slotTagId ?? undefined);
     setSlotAdd(null);
     setSlotTitle('');
+    setSlotTagId(null);
+    setSlotTagCreating(false);
+    setSlotNewTagName('');
+  };
+
+  const createSlotTag = () => {
+    if (!slotNewTagName.trim() || !onTagsChange) return;
+    const newTag: CalendarTag = {
+      id: `tag-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: slotNewTagName.trim(),
+      color: slotNewTagColor,
+    };
+    onTagsChange([...tags, newTag]);
+    setSlotTagId(newTag.id);
+    setSlotTagCreating(false);
+    setSlotNewTagName('');
+    setSlotNewTagColor('#6366F1');
   };
 
   return (
@@ -374,9 +402,7 @@ export default function CalendarView({items, deadline, onUpdate, onDelete, onQui
             )}
 
             {/* Separator */}
-            {onQuickAdd && (
-              <div className="hidden h-5 w-px bg-black/[0.07] sm:block" />
-            )}
+            {onQuickAdd && <div className="hidden h-5 w-px bg-black/[0.07] sm:block" />}
 
             <ViewSwitcher<SubView>
               value={subView}
@@ -559,6 +585,9 @@ export default function CalendarView({items, deadline, onUpdate, onDelete, onQui
               if (Object.keys(patch).length > 0) onUpdate(updated.id, patch);
             }}
             onDelete={id => onDelete(id)}
+            tags={tags}
+            onAssignTag={onAssignTag}
+            onTagsChange={onTagsChange}
           />
         );
       })()}
@@ -778,6 +807,81 @@ export default function CalendarView({items, deadline, onUpdate, onDelete, onQui
                 </button>
               ))}
             </div>
+
+            {/* Tag picker */}
+            {(tags.length > 0 || onTagsChange) && (
+              <div className="mb-3">
+                <p className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-widest text-[#94A3B8]">Tag</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {tags.map(tag => {
+                    const isSel = slotTagId === tag.id;
+                    return (
+                      <button
+                        key={tag.id}
+                        type="button"
+                        onClick={() => setSlotTagId(prev => prev === tag.id ? null : tag.id)}
+                        className="flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition"
+                        style={{
+                          borderColor: isSel ? tag.color : `${tag.color}55`,
+                          backgroundColor: isSel ? `${tag.color}18` : 'transparent',
+                          color: isSel ? tag.color : '#6B7280',
+                        }}
+                      >
+                        <span className="h-1.5 w-1.5 rounded-full" style={{backgroundColor: tag.color, opacity: isSel ? 1 : 0.6}} />
+                        {tag.name}
+                      </button>
+                    );
+                  })}
+                  {onTagsChange && !slotTagCreating && (
+                    <button
+                      type="button"
+                      onClick={() => setSlotTagCreating(true)}
+                      className="rounded-full border border-dashed border-black/[0.15] px-2 py-0.5 text-[11px] text-[#9CA3AF] transition hover:border-black/[0.25] hover:text-[#6B7280]"
+                    >
+                      + New
+                    </button>
+                  )}
+                </div>
+                {slotTagCreating && onTagsChange && (
+                  <div className="mt-2 rounded-xl border border-black/[0.07] bg-black/[0.025] p-2">
+                    <div className="mb-1.5 flex gap-1">
+                      {['#6366F1','#EC4899','#EF4444','#F59E0B','#10B981','#3B82F6','#8B5CF6','#F97316'].map(c => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setSlotNewTagColor(c)}
+                          className="h-[14px] w-[14px] rounded-full border border-black/[0.1] transition hover:scale-110"
+                          style={{backgroundColor: c, outline: slotNewTagColor === c ? `2px solid ${c}` : 'none', outlineOffset: 1}}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={slotNewTagName}
+                        onChange={e => setSlotNewTagName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && slotNewTagName.trim()) createSlotTag();
+                          if (e.key === 'Escape') { setSlotTagCreating(false); setSlotNewTagName(''); }
+                        }}
+                        placeholder="Tag name…"
+                        autoFocus
+                        className="min-w-0 flex-1 rounded-lg border border-black/[0.08] bg-white px-2 py-1 text-[11.5px] text-[#1E293B] placeholder:text-[#94A3B8] outline-none focus:border-indigo-200 focus:ring-2 focus:ring-indigo-100 transition"
+                      />
+                      <button
+                        type="button"
+                        disabled={!slotNewTagName.trim()}
+                        onClick={createSlotTag}
+                        className="rounded-lg px-2.5 py-1 text-[11px] font-semibold text-white transition disabled:opacity-40"
+                        style={{backgroundColor: slotNewTagColor}}
+                      >
+                        Create
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex gap-2">

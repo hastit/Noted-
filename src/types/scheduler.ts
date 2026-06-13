@@ -10,6 +10,12 @@ export type AIPlanResponse = {
   reasoning: string;
 };
 
+export type CalendarTag = {
+  id: string;
+  name: string;
+  color: string; // hex e.g. #6366F1
+};
+
 export type ScheduledBlock = {
   id: string;
   title: string;
@@ -21,6 +27,7 @@ export type ScheduledBlock = {
   customColor?: string;
   colorCategory?: string;
   source: 'ai' | 'task' | 'recurring';
+  tagId?: string; // references a CalendarTag.id
 };
 
 export type DayScheduleGroup = {

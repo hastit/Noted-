@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {AlertCircle, ChevronDown, Clock3, Lightbulb, PencilLine, Plus, RefreshCw, Save, Sparkles, Trash2, X} from 'lucide-react';
 import type {CalendarEvent, Tag, Task} from '../types';
-import type {AIPlanResponse, ScheduledBlock} from '../types/scheduler';
+import type {AIPlanResponse, CalendarTag, ScheduledBlock} from '../types/scheduler';
 import {requestAiSchedule, AiScheduleError} from '../services/aiSchedulerClient';
 import {
   consumeAiRequest,
@@ -319,6 +319,23 @@ export default function Calendar({events, tasks = [], onScheduledBlocksChange}: 
   const generationInFlightRef = useRef(false);
   const quotaSyncInFlightRef = useRef(false);
 
+  const [calendarTags, setCalendarTags] = useState<CalendarTag[]>(() => {
+    try {
+      const stored = localStorage.getItem('noted_calendar_tags');
+      return stored ? (JSON.parse(stored) as CalendarTag[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [blockTagMap, setBlockTagMap] = useState<Record<string, string>>(() => {
+    try {
+      const stored = localStorage.getItem('noted_block_tags');
+      return stored ? (JSON.parse(stored) as Record<string, string>) : {};
+    } catch {
+      return {};
+    }
+  });
+
   const syncServerQuota = async () => {
     if (quotaSyncInFlightRef.current) return;
     quotaSyncInFlightRef.current = true;
@@ -398,6 +415,14 @@ export default function Calendar({events, tasks = [], onScheduledBlocksChange}: 
     return () => window.clearTimeout(id);
   }, [toast]);
 
+  useEffect(() => {
+    try { localStorage.setItem('noted_calendar_tags', JSON.stringify(calendarTags)); } catch {}
+  }, [calendarTags]);
+
+  useEffect(() => {
+    try { localStorage.setItem('noted_block_tags', JSON.stringify(blockTagMap)); } catch {}
+  }, [blockTagMap]);
+
   const isPersistedId = (id: string) => !id.startsWith('ai-') && !id.startsWith('task-') && !id.startsWith('rec__');
 
   const recurringOccurrences = useMemo(() => {
@@ -414,7 +439,16 @@ export default function Calendar({events, tasks = [], onScheduledBlocksChange}: 
     return expandRecurringBlocksForRange(resolved, recurringExceptions, start, end);
   }, [recurringBlocks, recurringExceptions, subjectColors]);
 
-  const calendarItems = useMemo(() => [...items, ...recurringOccurrences], [items, recurringOccurrences]);
+  const calendarItems = useMemo(() => {
+    const tagById = new Map(calendarTags.map(t => [t.id, t]));
+    return [...items, ...recurringOccurrences].map(item => {
+      const tagId = blockTagMap[item.id];
+      if (!tagId) return item;
+      const tag = tagById.get(tagId);
+      if (!tag) return item;
+      return {...item, tagId, customColor: tag.color};
+    });
+  }, [items, recurringOccurrences, calendarTags, blockTagMap]);
   const subjectColorMap = useMemo(
     () =>
       subjectColors.reduce<Record<string, string>>((acc, row) => {
@@ -776,6 +810,22 @@ export default function Calendar({events, tasks = [], onScheduledBlocksChange}: 
     await action();
   };
 
+  const handleTagsChange = (tags: CalendarTag[]) => {
+    setCalendarTags(tags);
+  };
+
+  const handleAssignTag = (blockId: string, tagId: string | null) => {
+    setBlockTagMap(prev => {
+      const next = {...prev};
+      if (tagId === null) {
+        delete next[blockId];
+      } else {
+        next[blockId] = tagId;
+      }
+      return next;
+    });
+  };
+
   const handleQuickAdd = (type: 'manage-events' | 'routine' | 'import') => {
     if (type === 'manage-events') {
       setShowManageEvents(true);
@@ -788,7 +838,7 @@ export default function Calendar({events, tasks = [], onScheduledBlocksChange}: 
     }
   };
 
-  const handleSlotCreate = async (dayKey: string, startMinute: number, durationMinutes: number, title: string) => {
+  const handleSlotCreate = async (dayKey: string, startMinute: number, durationMinutes: number, title: string, tagId?: string) => {
     const endMinute = startMinute + durationMinutes;
     const newBlocks = await createBlocks([{
       id: '',
@@ -800,6 +850,9 @@ export default function Calendar({events, tasks = [], onScheduledBlocksChange}: 
       source: 'task' as const,
     }]);
     setItems(prev => [...prev, ...newBlocks]);
+    if (tagId && newBlocks.length > 0) {
+      handleAssignTag(newBlocks[0].id, tagId);
+    }
   };
 
   const handleSaveQuickBlock = async (data: EventSaveData) => {
@@ -1296,7 +1349,7 @@ export default function Calendar({events, tasks = [], onScheduledBlocksChange}: 
                 <CalendarEmptyState onSetupSchedule={() => setShowMySchedule(true)} />
               </div>
             ) : (
-              <CalendarView items={calendarItems} deadline={latestDeadline} onUpdate={updateItem} onDelete={deleteItem} onQuickAdd={handleQuickAdd} onSlotCreate={handleSlotCreate} onCommitRecurringDrop={handleCommitRecurringDrop} onUndoRecurringDrop={handleUndoRecurringDrop} />
+              <CalendarView items={calendarItems} deadline={latestDeadline} onUpdate={updateItem} onDelete={deleteItem} onQuickAdd={handleQuickAdd} onSlotCreate={handleSlotCreate} onCommitRecurringDrop={handleCommitRecurringDrop} onUndoRecurringDrop={handleUndoRecurringDrop} tags={calendarTags} onTagsChange={handleTagsChange} onAssignTag={handleAssignTag} />
             )
           ) : (
             <div className="rounded-3xl border border-black/[0.06] bg-white/80 p-5 shadow-[0_4px_40px_-12px_rgba(15,23,42,0.08)] backdrop-blur-xl md:p-7">

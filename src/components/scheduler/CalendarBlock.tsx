@@ -136,6 +136,12 @@ export default function CalendarBlock({item, layout, compact = false, isActive =
     accentStripeColor = base;
     recurringIconColor = base;
     textColor = '#1e293b'; // always dark on pastel background
+  } else if (customColor) {
+    // User tag color overrides source defaults
+    backgroundColor = toPastel(customColor, 0.12);
+    borderColor = toRgba(customColor, 0.28);
+    accentStripeColor = customColor;
+    textColor = '#1e293b';
   } else if (item.source === 'ai') {
     // AI-generated (saved) sessions: soft indigo
     backgroundColor = '#EEEEFF';
