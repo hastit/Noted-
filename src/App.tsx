@@ -364,8 +364,10 @@ function AuthenticatedApp() {
     if (activeTab !== 'notes') setNotesImmersive(false);
   }, [activeTab]);
 
+  const isNotesTab = activeTab === 'notes';
+
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden relative min-h-0">
+    <div className={`h-screen w-screen flex flex-col overflow-hidden relative min-h-0 ${isNotesTab ? 'bg-white' : ''}`}>
 
       {dataLoading && (
         <div className="absolute inset-0 z-[150] flex flex-col items-center justify-center bg-[#f8f9fa]/80 backdrop-blur-[2px] pointer-events-none">
@@ -378,7 +380,7 @@ function AuthenticatedApp() {
         </div>
       )}
 
-      <header className={`${notesImmersive ? 'hidden' : 'hidden md:grid'} h-16 sm:h-20 shrink-0 z-50 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-3 px-3 sm:px-5 lg:px-8 min-w-0`}>
+      <header className={`${notesImmersive ? 'hidden' : 'hidden md:grid'} h-16 sm:h-20 shrink-0 z-50 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-3 px-3 sm:px-5 lg:px-8 min-w-0 ${isNotesTab ? 'bg-white border-b border-black/[0.06]' : ''}`}>
         <div className="flex items-center gap-2 sm:gap-3 min-w-0 justify-self-start">
           <div className="w-8 h-8 shrink-0 rounded-lg bg-black flex items-center justify-center">
             <div className="w-4 h-4 rounded-sm bg-white rotate-45" />
@@ -420,7 +422,7 @@ function AuthenticatedApp() {
 
       </header>
 
-      <header className={`${notesImmersive ? 'hidden' : 'md:hidden flex'} h-12 max-h-12 shrink-0 z-50 items-center justify-between gap-2 px-3 min-w-0 bg-[#f8f9fa]/90 backdrop-blur-sm`}>
+      <header className={`${notesImmersive ? 'hidden' : 'md:hidden flex'} h-12 max-h-12 shrink-0 z-50 items-center justify-between gap-2 px-3 min-w-0 ${isNotesTab ? 'bg-white border-b border-black/[0.06]' : 'bg-[#f8f9fa]/90 backdrop-blur-sm'}`}>
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-7 h-7 shrink-0 rounded-md bg-black flex items-center justify-center">
             <div className="w-3 h-3 rounded-sm bg-white rotate-45" />
@@ -431,10 +433,10 @@ function AuthenticatedApp() {
 
       <main
         className={`flex-1 min-h-0 min-w-0 flex flex-col relative z-10 ${
-          notesImmersive
-            ? 'px-0 pt-0 pb-0 max-md:px-0 max-md:pt-0 max-md:pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))]'
+          notesImmersive || isNotesTab
+            ? 'p-0 max-md:pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))]'
             : 'px-3 sm:px-5 lg:px-8 max-md:px-3 max-md:pt-2 md:pt-6 lg:pt-7 pb-4 sm:pb-6 lg:pb-8 max-md:pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))]'
-        } overflow-x-visible overflow-y-hidden`}
+        } overflow-hidden`}
       >
         <AnimatePresence mode="wait">
           <motion.div
@@ -443,7 +445,7 @@ function AuthenticatedApp() {
             animate={{opacity: 1, y: 0}}
             exit={{opacity: 0, y: -10}}
             transition={{duration: 0.4, ease: [0.22, 1, 0.36, 1]}}
-            className="h-full min-h-0 w-full min-w-0 overflow-y-auto overflow-x-visible"
+            className={`h-full min-h-0 w-full min-w-0 ${isNotesTab ? 'overflow-hidden' : 'overflow-y-auto overflow-x-visible'}`}
           >
             {activeTab === 'dashboard' && (
               <Dashboard
@@ -509,13 +511,17 @@ function AuthenticatedApp() {
         </AnimatePresence>
       </main>
 
-      <MobileBottomNav active={activeTab} onChange={setActiveTab} />
+      <MobileBottomNav active={activeTab} onChange={setActiveTab} solidWhite={isNotesTab} />
 
       {/* Floating mini-timer — visible on all tabs except dashboard */}
-      {activeTab !== 'dashboard' && <FloatingTimer onNavigate={() => setActiveTab('dashboard')} />}
+      {activeTab !== 'dashboard' && activeTab !== 'notes' && <FloatingTimer onNavigate={() => setActiveTab('dashboard')} />}
 
-      <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-100/30 blur-[120px] rounded-full -z-10" />
-      <div className="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-rose-100/30 blur-[120px] rounded-full -z-10" />
+      {activeTab !== 'notes' && (
+        <>
+          <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-100/30 blur-[120px] rounded-full -z-10" />
+          <div className="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-rose-100/30 blur-[120px] rounded-full -z-10" />
+        </>
+      )}
     </div>
   );
 }

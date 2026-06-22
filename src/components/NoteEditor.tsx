@@ -292,9 +292,26 @@ interface NoteEditorProps {
   onChange: (html: string) => void;
   onDelete?: () => void;
   placeholder?: string;
+  /** Apple Notes–style continuous page (no toolbar, title inline) */
+  variant?: 'default' | 'apple';
+  title?: string;
+  onTitleChange?: (title: string) => void;
+  titlePlaceholder?: string;
+  /** Yellow pad for quick notes */
+  surface?: 'default' | 'quick';
 }
 
-export default function NoteEditor({ content, onChange, onDelete, placeholder }: NoteEditorProps) {
+export default function NoteEditor({
+  content,
+  onChange,
+  onDelete,
+  placeholder,
+  variant = 'default',
+  title,
+  onTitleChange,
+  titlePlaceholder = 'Title',
+  surface = 'default',
+}: NoteEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialHtml = parseContent(content);
 
@@ -360,6 +377,68 @@ export default function NoteEditor({ content, onChange, onDelete, placeholder }:
   }, [editor]);
 
   if (!editor) return null;
+
+  const editorStyles = `
+    .note-editor-content h1 { font-size: 1.75rem; font-weight: 700; line-height: 1.25; margin-bottom: 0.5rem; margin-top: 1.25rem; color: #111827; }
+    .note-editor-content h2 { font-size: 1.375rem; font-weight: 700; line-height: 1.3; margin-bottom: 0.4rem; margin-top: 1rem; color: #111827; }
+    .note-editor-content h3 { font-size: 1.125rem; font-weight: 600; line-height: 1.35; margin-bottom: 0.35rem; margin-top: 0.75rem; color: #111827; }
+    .note-editor-content p { font-size: 1.0625rem; line-height: 1.55; color: #374151; margin-bottom: 0.2rem; }
+    .note-editor-content p.is-editor-empty:first-child::before { color: #9CA3AF; content: attr(data-placeholder); float: left; height: 0; pointer-events: none; }
+    .note-editor-content ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 0.5rem; }
+    .note-editor-content ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 0.5rem; }
+    .note-editor-content li { font-size: 1.0625rem; line-height: 1.55; color: #1C1C1E; margin-bottom: 0.1rem; }
+    .note-editor-content ul[data-type="taskList"] { list-style: none; padding-left: 0.25rem; }
+    .note-editor-content ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.6rem; }
+    .note-editor-content ul[data-type="taskList"] li > label { margin-top: 0.3rem; flex-shrink: 0; }
+    .note-editor-content ul[data-type="taskList"] li > label input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: #FF9500; }
+    .note-editor-content ul[data-type="taskList"] li > div { flex: 1; min-width: 0; }
+    .note-editor-content ul[data-type="taskList"] li[data-checked="true"] > div { text-decoration: line-through; opacity: 0.45; }
+    .note-editor-content strong { font-weight: 700; }
+    .note-editor-content em { font-style: italic; }
+    .note-editor-content u { text-decoration: underline; }
+    .note-editor-content s { text-decoration: line-through; }
+    .note-editor-content a { color: #111827; text-decoration: underline; cursor: pointer; }
+    .note-editor-content mark { border-radius: 2px; padding: 0 2px; }
+    .note-editor-content img { max-width: 100%; height: auto; border-radius: 8px; margin: 0.5rem 0; display: block; }
+    .note-editor-content img.ProseMirror-selectednode { outline: 2px solid #007AFF; border-radius: 8px; }
+    .note-editor-content blockquote { border-left: 3px solid #E5E5EA; margin: 0.5rem 0; padding-left: 1rem; color: #8E8E93; font-style: italic; }
+    .note-editor-content code { background: #F2F2F7; border-radius: 4px; padding: 2px 5px; font-size: 0.9rem; font-family: ui-monospace, monospace; }
+    .note-editor-content pre { background: #1C1C1E; color: #F2F2F7; border-radius: 8px; padding: 1rem; overflow-x: auto; margin: 0.75rem 0; }
+    .note-editor-content pre code { background: none; color: inherit; padding: 0; }
+    .note-editor-content hr { border: none; border-top: 1px solid #E5E5EA; margin: 1.25rem 0; }
+    .note-editor-content .image-resizer { display: inline-block; position: relative; }
+    .note-editor-content .image-resizer__handle { position: absolute; background: white; border: 1.5px solid #007AFF; border-radius: 2px; width: 8px; height: 8px; }
+  `;
+
+  if (variant === 'apple') {
+    const bg = surface === 'quick' ? '#FFFBEB' : '#FFFFFF';
+    return (
+      <div className="flex flex-col h-full min-h-0" style={{backgroundColor: bg}}>
+        <style>{editorStyles}</style>
+        <div className="flex-1 min-h-0 overflow-y-auto [scrollbar-width:thin]">
+          <div className="max-w-3xl mx-auto px-5 sm:px-8 py-6 sm:py-8 min-h-full">
+            {onTitleChange && (
+              <input
+                type="text"
+                value={title ?? ''}
+                onChange={e => onTitleChange(e.target.value)}
+                placeholder={titlePlaceholder}
+                className="w-full bg-transparent border-none outline-none text-[26px] sm:text-[30px] font-bold text-[#111827] placeholder:text-[#9CA3AF] leading-tight mb-3"
+              />
+            )}
+            <EditorContent editor={editor} />
+          </div>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleImageUpload}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -448,39 +527,7 @@ export default function NoteEditor({ content, onChange, onDelete, placeholder }:
       {/* Editor body — Google-Docs page feel */}
       <div className="flex-1 overflow-y-auto bg-[#F0EEEB] px-4 py-8 [scrollbar-width:thin]">
         <div className="max-w-[816px] min-h-full mx-auto bg-white shadow-[0_1px_4px_rgba(0,0,0,0.10),0_4px_16px_rgba(0,0,0,0.06)] px-[96px] py-[80px] max-md:px-8 max-md:py-10 rounded-sm">
-          <style>{`
-            .note-editor-content h1 { font-size: 2rem; font-weight: 700; line-height: 1.25; margin-bottom: 0.5rem; margin-top: 1.5rem; color: #111827; }
-            .note-editor-content h2 { font-size: 1.5rem; font-weight: 700; line-height: 1.3; margin-bottom: 0.4rem; margin-top: 1.25rem; color: #111827; }
-            .note-editor-content h3 { font-size: 1.2rem; font-weight: 600; line-height: 1.35; margin-bottom: 0.35rem; margin-top: 1rem; color: #111827; }
-            .note-editor-content p { font-size: 1rem; line-height: 1.75; color: #374151; margin-bottom: 0.25rem; }
-            .note-editor-content p.is-editor-empty:first-child::before { color: #9CA3AF; content: attr(data-placeholder); float: left; height: 0; pointer-events: none; }
-            .note-editor-content ul { list-style-type: disc; padding-left: 1.75rem; margin-bottom: 0.5rem; }
-            .note-editor-content ol { list-style-type: decimal; padding-left: 1.75rem; margin-bottom: 0.5rem; }
-            .note-editor-content li { font-size: 1rem; line-height: 1.75; color: #374151; margin-bottom: 0.15rem; }
-            .note-editor-content ul[data-type="taskList"] { list-style: none; padding-left: 0.25rem; }
-            .note-editor-content ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.6rem; }
-            .note-editor-content ul[data-type="taskList"] li > label { margin-top: 0.3rem; flex-shrink: 0; }
-            .note-editor-content ul[data-type="taskList"] li > label input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: #111827; }
-            .note-editor-content ul[data-type="taskList"] li > div { flex: 1; min-width: 0; }
-            .note-editor-content ul[data-type="taskList"] li[data-checked="true"] > div { text-decoration: line-through; opacity: 0.45; }
-            .note-editor-content strong { font-weight: 700; }
-            .note-editor-content em { font-style: italic; }
-            .note-editor-content u { text-decoration: underline; }
-            .note-editor-content s { text-decoration: line-through; }
-            .note-editor-content a { color: #2563EB; text-decoration: underline; cursor: pointer; }
-            .note-editor-content a:hover { color: #1D4ED8; }
-            .note-editor-content mark { border-radius: 2px; padding: 0 2px; }
-            .note-editor-content img { max-width: 100%; height: auto; border-radius: 6px; margin: 0.5rem 0; display: block; }
-            .note-editor-content img.ProseMirror-selectednode { outline: 2px solid #3B82F6; border-radius: 6px; }
-            .note-editor-content blockquote { border-left: 3px solid #E5E7EB; margin: 0.5rem 0; padding-left: 1rem; color: #6B7280; font-style: italic; }
-            .note-editor-content code { background: #F3F4F6; border-radius: 4px; padding: 2px 5px; font-size: 0.875rem; font-family: monospace; color: #DC2626; }
-            .note-editor-content pre { background: #1E293B; color: #E2E8F0; border-radius: 8px; padding: 1rem 1.25rem; overflow-x: auto; margin: 0.75rem 0; }
-            .note-editor-content pre code { background: none; color: inherit; padding: 0; font-size: 0.875rem; }
-            .note-editor-content hr { border: none; border-top: 1px solid #E5E7EB; margin: 1.5rem 0; }
-            /* Image resize handles */
-            .note-editor-content .image-resizer { display: inline-block; position: relative; }
-            .note-editor-content .image-resizer__handle { position: absolute; background: white; border: 1.5px solid #3B82F6; border-radius: 2px; width: 8px; height: 8px; }
-          `}</style>
+          <style>{editorStyles}</style>
           <EditorContent editor={editor} />
         </div>
       </div>

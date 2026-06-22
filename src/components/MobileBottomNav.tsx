@@ -21,15 +21,19 @@ type Props = {
   active: TabType;
   onChange: (tab: TabType) => void;
   hidden?: boolean;
+  /** Match Notes tab full-white chrome */
+  solidWhite?: boolean;
 };
 
-export default function MobileBottomNav({active, onChange, hidden}: Props) {
+export default function MobileBottomNav({active, onChange, hidden, solidWhite}: Props) {
   const {t} = useLanguage();
   if (hidden) return null;
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 inset-x-0 z-[130] max-h-14 border-t border-black/[0.06] bg-[#fdfdfd]/98 backdrop-blur-md pb-[env(safe-area-inset-bottom,0px)] pt-0.5 pointer-events-auto"
+      className={`md:hidden fixed bottom-0 inset-x-0 z-[130] max-h-14 border-t border-black/[0.06] pb-[env(safe-area-inset-bottom,0px)] pt-0.5 pointer-events-auto ${
+        solidWhite ? 'bg-white' : 'bg-[#fdfdfd]/98 backdrop-blur-md'
+      }`}
       aria-label="Navigation principale"
     >
       <div className="flex h-14 max-h-14 items-stretch justify-around gap-0 px-1 max-w-lg mx-auto">
