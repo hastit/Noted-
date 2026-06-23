@@ -4,6 +4,7 @@ import {useEffect, useMemo, useRef, useState} from 'react';
 import type {CalendarTag, ScheduledBlock} from '../../types/scheduler';
 import BlockEditPopover from './BlockEditPopover';
 import CalendarBlock from './CalendarBlock';
+import DayTimelineView from './DayTimelineView';
 import HourGrid from './HourGrid';
 import {useCalendarDrag, type DropPreview} from './useCalendarDrag';
 import ViewSwitcher from './ViewSwitcher';
@@ -462,7 +463,28 @@ export default function CalendarView({items, deadline, onUpdate, onDelete, onQui
         </div>
       </div>
 
-      {/* ─── Calendar grid ─── */}
+      {/* ─── Calendar grid / day timeline ─── */}
+      {subView === 'day' ? (
+        <DayTimelineView
+          date={cursorDate}
+          dayKey={dayKey}
+          items={items.filter(item => item.date === dayKey)}
+          isToday={dayKey === todayKey}
+          todayKey={todayKey}
+          now={now}
+          selectedBlockId={selected?.block.id ?? null}
+          onBlockClick={(block, el) => {
+            if (block.source === 'recurring') return;
+            setSelected({block, rect: el.getBoundingClientRect()});
+          }}
+          onSlotCreate={
+            onSlotCreate
+              ? (dk, startMinute, durationMinutes, title) =>
+                  onSlotCreate(dk, startMinute, durationMinutes, title)
+              : undefined
+          }
+        />
+      ) : (
       <div ref={scrollRef} className="max-h-[68vh] overflow-auto">
         <div className="min-w-[980px]">
           <div className="relative grid" style={{gridTemplateColumns: `56px repeat(${visibleDays.length}, minmax(140px, 1fr)) 56px`}}>
@@ -566,6 +588,7 @@ export default function CalendarView({items, deadline, onUpdate, onDelete, onQui
           </div>
         </div>
       </div>
+      )}
 
       {(() => {
         if (!selected) return null;

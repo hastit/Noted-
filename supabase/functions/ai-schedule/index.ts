@@ -6,6 +6,7 @@ import {createClient} from 'https://esm.sh/@supabase/supabase-js@2';
 type RequestBody = {
   userText?: string;
   existingEvents?: Array<{title: string; date: string; startTime: number; endTime: number}>;
+  scheduledBlocks?: Array<{title: string; date: string; startTime: number; endTime: number}>;
   datedTasks?: Array<{title: string; dueDate: string; status: string}>;
   currentDateTimeLocal?: string; // "YYYY-MM-DDTHH:MM" in the user's local time
 };
@@ -152,7 +153,9 @@ Deno.serve(async req => {
       `You are a scheduling assistant. Today is ${todayIso}. ${timeContext} ` +
       'All suggested_day values must be >= today. ' +
       'Distribute work across multiple days leading up to the deadline rather than cramming it all on the deadline day. ' +
-      'Respect recurring commitments and never schedule inside those occupied slots. ' +
+      'Respect all occupied time: existingEvents, scheduledBlocks (already saved AI sessions), and recurringBusySlots. ' +
+      'Never suggest a day/time that falls inside an occupied slot — pick days with free capacity instead. ' +
+      'New tasks will be placed only in empty gaps; do not assume existing sessions will be removed. ' +
       'Return strict JSON only with keys: subtasks, deadline, reasoning. ' +
       'subtasks must be an array of objects with title, estimated_minutes, suggested_day. ' +
       'Use ISO date (YYYY-MM-DD) for deadline and suggested_day.';
@@ -160,6 +163,7 @@ Deno.serve(async req => {
     const userPrompt = JSON.stringify({
       request: body.userText,
       existingEvents: body.existingEvents ?? [],
+      scheduledBlocks: body.scheduledBlocks ?? [],
       recurringBusySlots: recurringBusy,
       datedTasks: body.datedTasks ?? [],
     });

@@ -12,12 +12,11 @@ import {
 } from '../services/aiQuota';
 import {
   createBlocks,
-  deleteAllBlocks,
   deleteBlock as deleteScheduledBlock,
   fetchAllBlocks,
   updateBlock as updateScheduledBlock,
 } from '../services/scheduledBlocksService';
-import {buildScheduleFromAiPlan, groupScheduleByDay, mapDueTasksToSchedule, type TimePreference} from '../services/schedulingEngine';
+import {buildScheduleFromAiPlan, findOverlappingBlocks, groupScheduleByDay, mapDueTasksToSchedule, type TimePreference} from '../services/schedulingEngine';
 import {getDatedTasks} from '../services/tasksAdapter';
 import {
   createScheduleImport,
@@ -495,6 +494,15 @@ export default function Calendar({events, tasks = [], onScheduledBlocksChange}: 
       const _now = new Date();
       const _pad = (n: number) => String(n).padStart(2, '0');
       const currentDateTimeLocal = `${_now.getFullYear()}-${_pad(_now.getMonth() + 1)}-${_pad(_now.getDate())}T${_pad(_now.getHours())}:${_pad(_now.getMinutes())}`;
+      const todayIso = currentDateTimeLocal.slice(0, 10);
+      const minStartToday = _now.getHours() * 60 + _now.getMinutes();
+
+      const scheduledBlocks = items.map(item => ({
+        title: item.title,
+        date: item.date,
+        startTime: item.startTime,
+        endTime: item.endTime,
+      }));
 
       const plan = await requestAiSchedule({
         userText,
@@ -505,6 +513,7 @@ export default function Calendar({events, tasks = [], onScheduledBlocksChange}: 
           startTime: e.startTime,
           endTime: e.endTime,
         })),
+        scheduledBlocks,
         datedTasks: includeDatedTasks
           ? getDatedTasks(tasks).map(t => ({title: t.title, dueDate: t.dueDate, status: t.status}))
           : [],
@@ -513,12 +522,14 @@ export default function Calendar({events, tasks = [], onScheduledBlocksChange}: 
         subtasks: plan.subtasks,
         deadline: plan.deadline,
         existingEvents: events,
+        existingScheduledBlocks: scheduledBlocks,
         recurringBusySlots: recurringOccurrences.map(item => ({
           date: item.date,
           startTime: item.startTime,
           endTime: item.endTime,
         })),
         timePreference,
+        minStartByDate: {[todayIso]: minStartToday},
       });
       const aiBlocks: ScheduledBlock[] = blocks.map(block => ({
         ...block,
@@ -539,18 +550,29 @@ export default function Calendar({events, tasks = [], onScheduledBlocksChange}: 
   const saveDraftToCalendar = async () => {
     if (!draftPlan || draftPlan.proposedBlocks.length === 0) return;
     const existingItems = items;
-    const replaceExisting =
-      existingItems.length > 0 &&
-      window.confirm(
-        'You already have scheduled blocks.\n\nPress OK to Replace them, or Cancel to Add the new ones.',
+    const proposedOccupied = draftPlan.proposedBlocks.map(block => ({
+      date: block.date,
+      startTime: block.startTime,
+      endTime: block.endTime,
+    }));
+    const existingOccupied = existingItems.map(item => ({
+      date: item.date,
+      startTime: item.startTime,
+      endTime: item.endTime,
+    }));
+    const overlaps = findOverlappingBlocks(proposedOccupied, existingOccupied);
+    if (overlaps.length > 0) {
+      setError(
+        'Some proposed sessions overlap existing calendar blocks. Adjust the draft times or regenerate the plan.',
       );
+      return;
+    }
 
     setSaving(true);
     setError(null);
     try {
-      if (replaceExisting) await deleteAllBlocks();
       const savedBatch = await createBlocks(draftPlan.proposedBlocks.map(block => toScheduledBlock(block, draftPlan.reasoning)));
-      const nextItems = replaceExisting ? savedBatch : [...existingItems, ...savedBatch];
+      const nextItems = [...existingItems, ...savedBatch];
       setItems(nextItems);
       setLatestDeadline(getLatestScheduledDate(nextItems));
       setDraftPlan(null);

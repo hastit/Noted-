@@ -44,6 +44,7 @@ function parseJsonPlan(raw: unknown): AIPlanResponse {
 export async function requestAiSchedule(input: {
   userText: string;
   existingEvents: Array<{title: string; date: string; startTime: number; endTime: number}>;
+  scheduledBlocks?: Array<{title: string; date: string; startTime: number; endTime: number}>;
   datedTasks: Array<{title: string; dueDate: string; status: string}>;
   currentDateTimeLocal: string;
 }): Promise<AIPlanResponse> {
@@ -54,6 +55,7 @@ export async function requestAiSchedule(input: {
     const bodyPayload = {
       userText: input.userText,
       existingEvents: input.existingEvents ?? [],
+      scheduledBlocks: input.scheduledBlocks ?? [],
       datedTasks: input.datedTasks ?? [],
       currentDateTimeLocal: input.currentDateTimeLocal,
     };

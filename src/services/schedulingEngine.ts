@@ -5,6 +5,8 @@ export type TimePreference = 'morning' | 'afternoon' | 'evening' | 'spread';
 
 type BusySlot = {date: string; start: number; end: number};
 
+export type OccupiedSlot = {date: string; startTime: number; endTime: number};
+
 const STEP = 15;
 
 // Time bands in minutes from midnight
@@ -59,14 +61,39 @@ function collides(slots: BusySlot[], date: string, start: number, end: number) {
   return slots.some(s => s.date === date && !(end <= s.start || start >= s.end));
 }
 
+export function slotsOverlap(a: OccupiedSlot, b: OccupiedSlot): boolean {
+  if (a.date !== b.date) return false;
+  return !(a.endTime <= b.startTime || a.startTime >= b.endTime);
+}
+
+export function findOverlappingBlocks(
+  proposed: OccupiedSlot[],
+  existing: OccupiedSlot[],
+): Array<{proposed: OccupiedSlot; existing: OccupiedSlot}> {
+  const hits: Array<{proposed: OccupiedSlot; existing: OccupiedSlot}> = [];
+  for (const p of proposed) {
+    for (const e of existing) {
+      if (slotsOverlap(p, e)) hits.push({proposed: p, existing: e});
+    }
+  }
+  return hits;
+}
+
+function occupiedToBusy(slots: OccupiedSlot[]): BusySlot[] {
+  return slots.map(s => ({date: s.date, start: s.startTime, end: s.endTime}));
+}
+
 function findSlotInBand(
   slots: BusySlot[],
   date: string,
   duration: number,
   bandStart: number,
   bandEnd: number,
+  minStart?: number,
 ): number | null {
-  for (let start = bandStart; start + duration <= bandEnd; start += STEP) {
+  const startFrom =
+    minStart !== undefined ? Math.max(bandStart, Math.ceil(minStart / STEP) * STEP) : bandStart;
+  for (let start = startFrom; start + duration <= bandEnd; start += STEP) {
     if (!collides(slots, date, start, start + duration)) return start;
   }
   return null;
@@ -77,9 +104,10 @@ function placeOnDay(
   date: string,
   duration: number,
   bandOrder: Array<[number, number]>,
+  minStart?: number,
 ): {start: number; end: number} | null {
   for (const [bandStart, bandEnd] of bandOrder) {
-    const start = findSlotInBand(slots, date, duration, bandStart, bandEnd);
+    const start = findSlotInBand(slots, date, duration, bandStart, bandEnd, minStart);
     if (start !== null) return {start, end: start + duration};
   }
   return null;
@@ -111,15 +139,27 @@ export function buildScheduleFromAiPlan(args: {
   subtasks: AISubtask[];
   deadline: string;
   existingEvents: CalendarEvent[];
-  recurringBusySlots?: Array<{date: string; startTime: number; endTime: number}>;
+  existingScheduledBlocks?: OccupiedSlot[];
+  recurringBusySlots?: OccupiedSlot[];
   timePreference?: TimePreference;
+  /** Earliest start (minutes from midnight) per date — e.g. current time for today. */
+  minStartByDate?: Record<string, number>;
 }): ScheduledBlock[] {
-  const {subtasks, deadline, existingEvents, recurringBusySlots = [], timePreference = 'spread'} = args;
+  const {
+    subtasks,
+    deadline,
+    existingEvents,
+    existingScheduledBlocks = [],
+    recurringBusySlots = [],
+    timePreference = 'spread',
+    minStartByDate = {},
+  } = args;
   const today = fmtDate(new Date());
-  const busy: BusySlot[] = existingEvents.map(e => ({date: e.date, start: e.startTime, end: e.endTime}));
-  for (const slot of recurringBusySlots) {
-    busy.push({date: slot.date, start: slot.startTime, end: slot.endTime});
-  }
+  const busy: BusySlot[] = [
+    ...existingEvents.map(e => ({date: e.date, start: e.startTime, end: e.endTime})),
+    ...occupiedToBusy(existingScheduledBlocks),
+    ...occupiedToBusy(recurringBusySlots),
+  ];
   const tasks = [...subtasks].sort((a, b) => {
     const aDay = a.suggested_day ?? deadline;
     const bDay = b.suggested_day ?? deadline;
@@ -148,20 +188,20 @@ export function buildScheduleFromAiPlan(args: {
 
     let placement: {date: string; start: number; end: number} | null = null;
     for (const day of candidateDays) {
-      const slot = placeOnDay(busy, day, duration, bandOrder);
+      const slot = placeOnDay(busy, day, duration, bandOrder, minStartByDate[day]);
       if (slot) {
         placement = {date: day, ...slot};
         break;
       }
     }
 
-    // Fallback: try all bands on the deadline day
+    // Fallback: scan backward from deadline, then forward if needed.
     if (!placement) {
       const allBands: Array<[number, number]> = [BANDS.morning, BANDS.afternoon, BANDS.evening];
       let date = deadline;
       let safety = 0;
       while (!placement && safety < 60) {
-        const slot = placeOnDay(busy, date, duration, allBands);
+        const slot = placeOnDay(busy, date, duration, allBands, minStartByDate[date]);
         if (slot) {
           placement = {date, ...slot};
         } else {
@@ -169,21 +209,19 @@ export function buildScheduleFromAiPlan(args: {
         }
         safety++;
       }
+      if (!placement) {
+        date = nextDay(deadline);
+        safety = 0;
+        while (!placement && safety < 30) {
+          const slot = placeOnDay(busy, date, duration, allBands, minStartByDate[date]);
+          if (slot) placement = {date, ...slot};
+          else date = nextDay(date);
+          safety++;
+        }
+      }
     }
 
-    if (!placement) {
-      const [, bandEnd] = BANDS.evening;
-      blocks.push({
-        id: `ai-unfit-${Math.random().toString(36).slice(2, 10)}`,
-        title: `${task.title} (couldn't fit)`,
-        durationMinutes: duration,
-        date: deadline,
-        startTime: bandEnd - duration,
-        endTime: bandEnd,
-        source: 'ai',
-      });
-      continue;
-    }
+    if (!placement) continue;
 
     addBusySlot(busy, {date: placement.date, start: placement.start, end: placement.end});
     daysByLoad.set(placement.date, (daysByLoad.get(placement.date) ?? 0) + duration);
