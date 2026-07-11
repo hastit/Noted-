@@ -34,12 +34,23 @@ export function AuthProvider({children}: {children: React.ReactNode}) {
 
     let cancelled = false;
 
+    const timeoutId = setTimeout(() => {
+      if (!cancelled) {
+        console.warn('Auth session check timed out after 10s');
+        setLoading(false);
+      }
+    }, 10000);
+
     supabase.auth
       .getSession()
       .then(({data: {session: s}}) => {
         if (!cancelled) setSession(s);
       })
+      .catch((err) => {
+        console.error('Failed to get auth session:', err);
+      })
       .finally(() => {
+        clearTimeout(timeoutId);
         if (!cancelled) setLoading(false);
       });
 
@@ -51,6 +62,7 @@ export function AuthProvider({children}: {children: React.ReactNode}) {
 
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);
