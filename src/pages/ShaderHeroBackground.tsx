@@ -1,3 +1,4 @@
+import React, {Component, useEffect, useState} from 'react';
 import {ShaderGradient, ShaderGradientCanvas} from 'shadergradient';
 
 const gradientProps = {
@@ -42,8 +43,50 @@ const gradientProps = {
   wireframe: false,
 };
 
-/** Arrière-plan WebGL du hero — chargé en lazy pour ne pas bloquer le premier rendu. */
-export default function ShaderHeroBackground() {
+function StaticGradientFallback() {
+  return (
+    <div
+      className="absolute inset-0 z-0 bg-gradient-to-br from-[#F57799] via-[#dbba95] to-[#FAAC68]"
+      aria-hidden
+    />
+  );
+}
+
+function isWebGLAvailable(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    return gl instanceof WebGLRenderingContext;
+  } catch {
+    return false;
+  }
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
+class ShaderErrorBoundary extends Component<{children: React.ReactNode}, ErrorBoundaryState> {
+  state: ErrorBoundaryState = {hasError: false};
+
+  static getDerivedStateFromError(): ErrorBoundaryState {
+    return {hasError: true};
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.warn('ShaderHeroBackground error:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <StaticGradientFallback />;
+    }
+    return this.props.children;
+  }
+}
+
+function ShaderGradientRenderer() {
   return (
     <ShaderGradientCanvas
       style={{
@@ -58,5 +101,28 @@ export default function ShaderHeroBackground() {
     >
       <ShaderGradient {...gradientProps} />
     </ShaderGradientCanvas>
+  );
+}
+
+/** Arrière-plan WebGL du hero — chargé en lazy pour ne pas bloquer le premier rendu. */
+export default function ShaderHeroBackground() {
+  const [webglSupported, setWebglSupported] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setWebglSupported(isWebGLAvailable());
+  }, []);
+
+  if (webglSupported === null) {
+    return <StaticGradientFallback />;
+  }
+
+  if (!webglSupported) {
+    return <StaticGradientFallback />;
+  }
+
+  return (
+    <ShaderErrorBoundary>
+      <ShaderGradientRenderer />
+    </ShaderErrorBoundary>
   );
 }
