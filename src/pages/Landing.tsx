@@ -8,20 +8,22 @@ import {
   Briefcase,
   CalendarDays,
   CheckCircle2,
+  CheckSquare,
   Circle,
   Clock3,
   Dumbbell,
   FileText,
   Globe,
+  LayoutDashboard,
   LayoutGrid,
   Moon,
   Plus,
   RefreshCw,
   Save,
   Search,
+  Settings as SettingsIcon,
   Smartphone,
   Sparkles,
-  SquareKanban,
   SquarePen,
   StickyNote,
   Sun,
@@ -1089,15 +1091,21 @@ function PhoneMockup() {
   );
 }
 
-type WebTab = 'notes' | 'tasks' | 'calendar';
+type WebTab = 'dashboard' | 'notes' | 'tasks' | 'calendar' | 'settings';
 
+/**
+ * Mirrors the real authenticated `/app` desktop shell (top pill nav),
+ * so Sign in expectations match what users actually open — not the iPhone companion.
+ */
 function WebAppMockup() {
   const [tab, setTab] = useState<WebTab>('notes');
 
   const navItems = [
-    {key: 'notes' as const, label: 'Notes', icon: FileText},
-    {key: 'tasks' as const, label: 'Tasks', icon: SquareKanban},
+    {key: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard},
+    {key: 'notes' as const, label: 'Notes', icon: BookOpen},
+    {key: 'tasks' as const, label: 'Tasks', icon: CheckSquare},
     {key: 'calendar' as const, label: 'Calendar', icon: CalendarDays},
+    {key: 'settings' as const, label: 'Settings', icon: SettingsIcon},
   ];
 
   const kanbanCol = (title: string, items: string[], tint: string) => (
@@ -1123,8 +1131,8 @@ function WebAppMockup() {
   };
 
   return (
-    <div className="w-full max-w-[720px] overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-[0_32px_80px_-24px_rgba(0,0,0,0.25)]">
-      {/* Browser chrome */}
+    <div className="w-full max-w-[760px] overflow-hidden rounded-2xl border border-black/[0.08] bg-[#f8f9fa] shadow-[0_32px_80px_-24px_rgba(0,0,0,0.25)]">
+      {/* Browser chrome — same SPA after Sign in lands on /app */}
       <div className="flex items-center gap-2 border-b border-black/[0.06] bg-[#FAFAF8] px-4 py-2.5">
         <div className="flex gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-[#FF5F57]" />
@@ -1132,135 +1140,191 @@ function WebAppMockup() {
           <span className="h-2.5 w-2.5 rounded-full bg-[#28C840]" />
         </div>
         <div className="mx-auto flex items-center gap-1.5 rounded-full bg-black/[0.05] px-4 py-1 text-[11px] font-medium text-neutral-500">
-          <span className="text-[9px]">🔒</span> noted.app
+          <span className="text-[9px]">🔒</span> noted.app/app
         </div>
         <div className="w-10" />
       </div>
 
-      <div className="flex h-[400px]">
-        {/* Sidebar */}
-        <div className="flex w-36 shrink-0 flex-col gap-1 border-r border-black/[0.05] bg-[#FAFAF8] p-3">
-          <div className="mb-3 flex items-center gap-2 px-1.5">
-            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-black">
-              <div className="h-2 w-2 rotate-45 rounded-[2px] bg-white" />
-            </div>
-            <span className="font-display text-sm font-bold text-neutral-900">Noted</span>
+      {/* Real desktop shell: logo left + centered top pill nav */}
+      <div className="grid h-14 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-b border-black/[0.04] bg-white/80 px-4">
+        <div className="flex items-center gap-2 justify-self-start">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-black">
+            <div className="h-3 w-3 rotate-45 rounded-[2px] bg-white" />
           </div>
-          {navItems.map(item => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => setTab(item.key)}
-              className={`relative flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition ${
-                tab === item.key ? 'text-neutral-900' : 'text-neutral-500 hover:text-neutral-800'
-              }`}
-              aria-pressed={tab === item.key}
-            >
-              {tab === item.key && (
-                <motion.span
-                  layoutId="web-nav-pill"
-                  className="absolute inset-0 rounded-lg bg-black/[0.06]"
-                  transition={{type: 'spring', bounce: 0.2, duration: 0.45}}
-                />
-              )}
-              <item.icon size={14} strokeWidth={2} className="relative z-10" />
-              <span className="relative z-10">{item.label}</span>
-            </button>
-          ))}
+          <span className="font-display text-sm font-bold tracking-tight text-neutral-900">Noted</span>
         </div>
 
-        {/* Main panel */}
-        <div className="relative min-w-0 flex-1 overflow-hidden p-5">
-          <AnimatePresence mode="wait">
-            {tab === 'notes' && (
-              <motion.div
-                key="notes"
-                initial={{opacity: 0, y: 10}}
-                animate={{opacity: 1, y: 0}}
-                exit={{opacity: 0, y: -8}}
-                transition={{duration: 0.25, ease: easeOut}}
-              >
-                <div className="mb-4 flex items-center justify-between">
-                  <p className="font-display text-lg font-bold text-neutral-900">Notes</p>
-                  <span className="rounded-full bg-neutral-900 px-3 py-1.5 text-[11px] font-semibold text-white">+ New note</span>
+        <nav className="justify-self-center">
+          <div className="relative flex w-max items-center gap-0.5 rounded-2xl bg-black/5 p-1">
+            {navItems.map(item => {
+              const isActive = tab === item.key;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setTab(item.key)}
+                  className={`relative flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 transition ${
+                    isActive ? 'text-black' : 'text-black/40 hover:text-black/60'
+                  }`}
+                  aria-pressed={isActive}
+                >
+                  {isActive && (
+                    <motion.span
+                      layoutId="web-nav-pill"
+                      className="absolute inset-0 rounded-xl bg-white shadow-sm"
+                      transition={{type: 'spring', bounce: 0.2, duration: 0.45}}
+                    />
+                  )}
+                  <item.icon size={14} strokeWidth={2} className="relative z-10" />
+                  <span className="relative z-10 hidden text-[11px] font-medium sm:inline">{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+
+        <div aria-hidden="true" />
+      </div>
+
+      <div className="relative h-[380px] overflow-hidden bg-[#f8f9fa] p-5">
+        <AnimatePresence mode="wait">
+          {tab === 'dashboard' && (
+            <motion.div
+              key="dashboard"
+              initial={{opacity: 0, y: 10}}
+              animate={{opacity: 1, y: 0}}
+              exit={{opacity: 0, y: -8}}
+              transition={{duration: 0.25, ease: easeOut}}
+              className="space-y-3"
+            >
+              <p className="font-display text-lg font-bold text-neutral-900">Good afternoon</p>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  {label: 'Focus', value: '25 min', tint: 'bg-blue-50'},
+                  {label: 'Tasks left', value: '4', tint: 'bg-amber-50'},
+                  {label: 'Notes today', value: '2', tint: 'bg-emerald-50'},
+                ].map(card => (
+                  <div key={card.label} className={`rounded-xl border border-black/[0.05] ${card.tint} p-3`}>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-black/40">{card.label}</p>
+                    <p className="mt-1 font-display text-base font-bold text-neutral-900">{card.value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="rounded-xl border border-black/[0.06] bg-white p-3.5 shadow-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-black/35">Up next</p>
+                <p className="mt-1.5 text-[13px] font-semibold text-neutral-900">Study block · 3:00–4:00 PM</p>
+              </div>
+            </motion.div>
+          )}
+          {tab === 'notes' && (
+            <motion.div
+              key="notes"
+              initial={{opacity: 0, y: 10}}
+              animate={{opacity: 1, y: 0}}
+              exit={{opacity: 0, y: -8}}
+              transition={{duration: 0.25, ease: easeOut}}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <p className="font-display text-lg font-bold text-neutral-900">Notes</p>
+                <span className="rounded-full bg-neutral-900 px-3 py-1.5 text-[11px] font-semibold text-white">+ New note</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  {title: 'Ideas for the essay', tag: 'Draft', tagCls: 'bg-amber-100 text-amber-800'},
+                  {title: 'Lecture 12 — memory', tag: 'Uni', tagCls: 'bg-blue-100 text-blue-800'},
+                  {title: 'Weekend trip packing', tag: 'Travel', tagCls: 'bg-emerald-100 text-emerald-800'},
+                  {title: 'Reading list', tag: 'Personal', tagCls: 'bg-rose-100 text-rose-800'},
+                ].map(note => (
+                  <div key={note.title} className="rounded-xl border border-black/[0.06] bg-white p-3.5 shadow-sm">
+                    <p className="font-display text-[13px] font-bold text-neutral-900">{note.title}</p>
+                    <div className="mt-2.5 space-y-1.5">
+                      <div className="h-1.5 w-full rounded-full bg-black/[0.06]" />
+                      <div className="h-1.5 w-[80%] rounded-full bg-black/[0.05]" />
+                    </div>
+                    <span className={`mt-3 inline-block rounded-full px-2 py-0.5 text-[9px] font-semibold ${note.tagCls}`}>
+                      {note.tag}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+          {tab === 'tasks' && (
+            <motion.div
+              key="tasks"
+              initial={{opacity: 0, y: 10}}
+              animate={{opacity: 1, y: 0}}
+              exit={{opacity: 0, y: -8}}
+              transition={{duration: 0.25, ease: easeOut}}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <p className="font-display text-lg font-bold text-neutral-900">Tasks</p>
+                <span className="rounded-full bg-neutral-900 px-3 py-1.5 text-[11px] font-semibold text-white">+ Add task</span>
+              </div>
+              <div className="flex gap-2.5">
+                {kanbanCol('To-Do', ['Read chapter 4', 'Email professor', 'Book study room'], 'bg-slate-50/80')}
+                {kanbanCol('Started', ['Lab report', 'Essay draft'], 'bg-blue-50/60')}
+                {kanbanCol('Done', ['Outline', 'Bibliography'], 'bg-emerald-50/70')}
+              </div>
+            </motion.div>
+          )}
+          {tab === 'calendar' && (
+            <motion.div
+              key="calendar"
+              initial={{opacity: 0, y: 10}}
+              animate={{opacity: 1, y: 0}}
+              exit={{opacity: 0, y: -8}}
+              transition={{duration: 0.25, ease: easeOut}}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <p className="font-display text-lg font-bold text-neutral-900">April 2026</p>
+                <span className="rounded-full bg-neutral-900 px-3 py-1.5 text-[11px] font-semibold text-white">+ Event</span>
+              </div>
+              <div className="overflow-hidden rounded-xl border border-black/[0.06] bg-white">
+                <div className="grid grid-cols-7 border-b border-black/[0.05] bg-[#FAFAF8] py-1.5 text-center text-[9px] font-bold uppercase tracking-wide text-black/35">
+                  {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                    <span key={i}>{d}</span>
+                  ))}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    {title: 'Ideas for the essay', tag: 'Draft', tagCls: 'bg-amber-100 text-amber-800'},
-                    {title: 'Lecture 12 — memory', tag: 'Uni', tagCls: 'bg-blue-100 text-blue-800'},
-                    {title: 'Weekend trip packing', tag: 'Travel', tagCls: 'bg-emerald-100 text-emerald-800'},
-                    {title: 'Reading list', tag: 'Personal', tagCls: 'bg-rose-100 text-rose-800'},
-                  ].map(note => (
-                    <div key={note.title} className="rounded-xl border border-black/[0.06] bg-[#FFFEF9] p-3.5 shadow-sm">
-                      <p className="font-display text-[13px] font-bold text-neutral-900">{note.title}</p>
-                      <div className="mt-2.5 space-y-1.5">
-                        <div className="h-1.5 w-full rounded-full bg-black/[0.06]" />
-                        <div className="h-1.5 w-[80%] rounded-full bg-black/[0.05]" />
-                      </div>
-                      <span className={`mt-3 inline-block rounded-full px-2 py-0.5 text-[9px] font-semibold ${note.tagCls}`}>
-                        {note.tag}
-                      </span>
+                <div className="grid grid-cols-7 gap-px bg-black/[0.04]">
+                  {Array.from({length: 28}, (_, i) => i + 1).map(d => (
+                    <div key={d} className="flex min-h-[38px] flex-col gap-0.5 bg-white p-1">
+                      <span className="text-[9px] font-semibold text-black/40">{d}</span>
+                      {calendarEvents[d] && (
+                        <span
+                          className={`truncate rounded px-1 py-px text-[7.5px] font-semibold text-white ${calendarEvents[d].color}`}
+                        >
+                          {calendarEvents[d].label}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
-              </motion.div>
-            )}
-            {tab === 'tasks' && (
-              <motion.div
-                key="tasks"
-                initial={{opacity: 0, y: 10}}
-                animate={{opacity: 1, y: 0}}
-                exit={{opacity: 0, y: -8}}
-                transition={{duration: 0.25, ease: easeOut}}
-              >
-                <div className="mb-4 flex items-center justify-between">
-                  <p className="font-display text-lg font-bold text-neutral-900">Tasks</p>
-                  <span className="rounded-full bg-neutral-900 px-3 py-1.5 text-[11px] font-semibold text-white">+ Add task</span>
+              </div>
+            </motion.div>
+          )}
+          {tab === 'settings' && (
+            <motion.div
+              key="settings"
+              initial={{opacity: 0, y: 10}}
+              animate={{opacity: 1, y: 0}}
+              exit={{opacity: 0, y: -8}}
+              transition={{duration: 0.25, ease: easeOut}}
+              className="space-y-3"
+            >
+              <p className="font-display text-lg font-bold text-neutral-900">Settings</p>
+              {['Account', 'Theme', 'Export data'].map(row => (
+                <div
+                  key={row}
+                  className="flex items-center justify-between rounded-xl border border-black/[0.06] bg-white px-3.5 py-3 text-[13px] font-medium text-neutral-800 shadow-sm"
+                >
+                  {row}
+                  <span className="text-black/25">›</span>
                 </div>
-                <div className="flex gap-2.5">
-                  {kanbanCol('To-Do', ['Read chapter 4', 'Email professor', 'Book study room'], 'bg-slate-50/80')}
-                  {kanbanCol('Started', ['Lab report', 'Essay draft'], 'bg-blue-50/60')}
-                  {kanbanCol('Done', ['Outline', 'Bibliography'], 'bg-emerald-50/70')}
-                </div>
-              </motion.div>
-            )}
-            {tab === 'calendar' && (
-              <motion.div
-                key="calendar"
-                initial={{opacity: 0, y: 10}}
-                animate={{opacity: 1, y: 0}}
-                exit={{opacity: 0, y: -8}}
-                transition={{duration: 0.25, ease: easeOut}}
-              >
-                <div className="mb-4 flex items-center justify-between">
-                  <p className="font-display text-lg font-bold text-neutral-900">April 2026</p>
-                  <span className="rounded-full bg-neutral-900 px-3 py-1.5 text-[11px] font-semibold text-white">+ Event</span>
-                </div>
-                <div className="overflow-hidden rounded-xl border border-black/[0.06]">
-                  <div className="grid grid-cols-7 border-b border-black/[0.05] bg-[#FAFAF8] py-1.5 text-center text-[9px] font-bold uppercase tracking-wide text-black/35">
-                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-                      <span key={i}>{d}</span>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-7 gap-px bg-black/[0.04]">
-                    {Array.from({length: 28}, (_, i) => i + 1).map(d => (
-                      <div key={d} className="flex min-h-[38px] flex-col gap-0.5 bg-white p-1">
-                        <span className="text-[9px] font-semibold text-black/40">{d}</span>
-                        {calendarEvents[d] && (
-                          <span
-                            className={`truncate rounded px-1 py-px text-[7.5px] font-semibold text-white ${calendarEvents[d].color}`}
-                          >
-                            {calendarEvents[d].label}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -1284,8 +1348,8 @@ function PlatformShowcase() {
             One workspace. Every screen.
           </h2>
           <p className="mx-auto mt-5 max-w-xl text-base leading-[1.7] text-[#555]">
-            Noted lives in your browser and in your pocket. Start on the web, pick up on your iPhone — everything stays
-            in sync.
+            Sign in opens the Noted web workspace in your browser. The iPhone companion is a separate App Store app that
+            stays in sync — logging in here never launches the native mobile app.
           </p>
         </FadeUp>
 
@@ -1332,9 +1396,9 @@ function PlatformShowcase() {
                 className="flex w-full flex-col items-center gap-4"
               >
                 <WebAppMockup />
-                <p className="max-w-sm text-center text-sm leading-relaxed text-[#777]">
-                  It&apos;s clickable — flip through Notes, Tasks, and Calendar. The full workspace runs in any
-                  browser, nothing to install.
+                <p className="max-w-md text-center text-sm leading-relaxed text-[#777]">
+                  This is what Sign in opens — the browser workspace with the top pill nav. On a narrow phone screen the
+                  same website uses a compact bottom tab bar; that is still the web app, not the native iPhone app.
                 </p>
               </motion.div>
             ) : (
@@ -1348,7 +1412,8 @@ function PlatformShowcase() {
               >
                 <PhoneMockup />
                 <p className="max-w-sm text-center text-sm leading-relaxed text-[#777]">
-                  Jot it down and hit Done — AI files it into the right notebook for you.
+                  Preview of the separate iPhone companion. Install it from the App Store — Sign in on this site always
+                  opens the browser workspace instead.
                 </p>
               </motion.div>
             )}
@@ -1356,13 +1421,13 @@ function PlatformShowcase() {
         </div>
 
         <FadeUp className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-          <AppStoreBadge />
           <Link
             to="/signup"
-            className="inline-flex min-h-14 items-center justify-center rounded-full border border-black/[0.12] bg-white px-8 text-sm font-semibold text-neutral-900 shadow-sm transition hover:scale-[1.02] hover:bg-neutral-50 active:scale-[0.98]"
+            className="inline-flex min-h-14 items-center justify-center rounded-full bg-neutral-900 px-8 text-sm font-semibold text-white shadow-sm transition hover:scale-[1.02] hover:bg-neutral-800 active:scale-[0.98]"
           >
-            Or open Noted in your browser →
+            Open Noted in your browser →
           </Link>
+          <AppStoreBadge />
         </FadeUp>
       </div>
     </section>
