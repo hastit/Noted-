@@ -32,8 +32,8 @@ interface DashboardProps {
 }
 
 const CARD =
-  'rounded-3xl border border-black/[0.06] bg-white shadow-[0_4px_24px_-8px_rgba(15,23,42,0.08)] overflow-hidden';
-const CARD_HEADER = 'flex items-center justify-between gap-3 px-5 py-4 border-b border-black/[0.05]';
+  'rounded-2xl border border-black/[0.07] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] overflow-hidden';
+const CARD_HEADER = 'flex items-center justify-between gap-3 px-5 py-3.5 border-b border-black/[0.05] bg-[#FAFBFC]';
 const CARD_BODY = 'px-5 py-4';
 
 function pad(n: number) {
@@ -389,34 +389,53 @@ export default function Dashboard({
   const timeLabel = now.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'});
 
   return (
-    <div className="h-full min-h-0 flex overflow-hidden">
+    <div className="h-full min-h-0 flex overflow-hidden bg-[#F7F8FA]">
       {/* Left: scrollable main content */}
-      <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden pb-12 [scrollbar-width:thin]">
+      <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden [scrollbar-width:thin]">
       <motion.div
         initial={{opacity: 0, y: 8}}
         animate={{opacity: 1, y: 0}}
         transition={{duration: 0.35, ease: [0.22, 1, 0.36, 1]}}
-        className="max-w-3xl mx-auto flex flex-col gap-8 md:gap-10 px-1 md:px-0"
+        className="max-w-5xl mx-auto flex flex-col gap-6 sm:gap-8 px-0 sm:px-1 lg:px-2 pb-10"
       >
-        {/* Header */}
-        <header className="flex flex-col gap-7 pt-2 md:pt-0">
-          <div className="flex items-start justify-between gap-6">
+        {/* Web page header */}
+        <header className="flex flex-col gap-5 sm:gap-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-medium text-[#9CA3AF] tracking-wide">{dateLabel}</p>
-              <h1 className="mt-1.5 text-[26px] md:text-[32px] font-bold tracking-tight text-[#111827] leading-tight">
+              <p className="text-[12px] sm:text-[13px] font-medium text-[#9CA3AF] tracking-wide">{dateLabel}</p>
+              <h1 className="mt-1 text-[28px] sm:text-[34px] font-bold tracking-tight text-[#111827] leading-tight font-display">
                 {greeting}, {displayName}
               </h1>
-              <p className="mt-2.5 text-[14px] text-[#6B7280] leading-relaxed">{briefing}</p>
+              <p className="mt-2 text-[14px] text-[#6B7280] leading-relaxed max-w-2xl">{briefing}</p>
             </div>
-            <p className="hidden sm:block shrink-0 text-[36px] font-bold tabular-nums text-[#111827] leading-none tracking-tight mt-0.5">
-              {timeLabel}
-            </p>
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              <p className="hidden md:block text-[28px] font-bold tabular-nums text-[#111827] leading-none tracking-tight mr-1">
+                {timeLabel}
+              </p>
+              <button
+                type="button"
+                onClick={() => onNavigate('tasks')}
+                className="inline-flex h-10 items-center justify-center rounded-xl border border-black/[0.08] bg-white px-3.5 text-[13px] font-semibold text-[#374151] shadow-sm hover:bg-black/[0.02] transition-colors"
+              >
+                New task
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate('calendar')}
+                className="inline-flex h-10 items-center justify-center rounded-xl bg-[#111827] px-3.5 text-[13px] font-semibold text-white shadow-sm hover:bg-black transition-colors"
+              >
+                Open scheduler
+              </button>
+            </div>
           </div>
 
-          <div>
-            <p className="text-[10.5px] font-semibold uppercase tracking-widest text-[#C4C9D4] mb-3">
-              This week
-            </p>
+          <div className="rounded-2xl border border-black/[0.06] bg-white px-3 py-3 sm:px-4 sm:py-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+            <div className="flex items-center justify-between gap-3 mb-2.5 px-0.5">
+              <p className="text-[10.5px] font-semibold uppercase tracking-widest text-[#C4C9D4]">
+                This week
+              </p>
+              <p className="text-[12px] font-medium text-[#9CA3AF] tabular-nums sm:hidden">{timeLabel}</p>
+            </div>
             <WeekStrip
               events={events}
               tasks={tasks}
@@ -428,14 +447,14 @@ export default function Dashboard({
         </header>
 
         {suggestion && (
-          <div className="flex gap-3 rounded-2xl border border-black/[0.06] bg-[#FAFAFA] px-4 py-3.5">
+          <div className="flex gap-3 rounded-2xl border border-black/[0.06] bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
             <Lightbulb size={18} className="text-[#6B7280] shrink-0 mt-0.5" />
             <p className="text-[13px] leading-5 text-[#4B5563]">{suggestion}</p>
           </div>
         )}
 
         {/* Hero: now + focus */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 md:gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
           <section className={CARD}>
             <div className={CARD_HEADER}>
               <h2 className="text-[15px] font-semibold text-[#111827]">Now</h2>
@@ -512,7 +531,7 @@ export default function Dashboard({
                   return (
                     <li key={ev.id}>
                       <div
-                        className={`flex items-center gap-3 rounded-2xl px-3 py-3 ${isNow ? 'bg-black/[0.04]' : ''}`}
+                        className={`flex items-center gap-3 rounded-xl px-3 py-3 ${isNow ? 'bg-black/[0.04]' : ''}`}
                       >
                         <div
                           className="w-1 h-10 rounded-full shrink-0"
@@ -527,7 +546,7 @@ export default function Dashboard({
                           </p>
                         </div>
                         {isNow && (
-                          <span className="text-[11px] font-semibold text-[#374151] bg-black/[0.06] px-2 py-1 rounded-full shrink-0">
+                          <span className="text-[11px] font-semibold text-[#374151] bg-black/[0.06] px-2 py-1 rounded-md shrink-0">
                             Now
                           </span>
                         )}
@@ -550,7 +569,7 @@ export default function Dashboard({
         </section>
 
         {/* Tasks + Continue */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 md:gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
           <section className={CARD}>
             <div className={CARD_HEADER}>
               <div className="flex items-center gap-2">
@@ -592,7 +611,7 @@ export default function Dashboard({
                   {overdueTasks.slice(0, 3).map(task => (
                     <div
                       key={task.id}
-                      className="flex items-center gap-3 rounded-2xl px-3 py-2.5 hover:bg-red-50/50 cursor-pointer"
+                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-red-50/50 cursor-pointer"
                       onClick={() => onNavigate('tasks')}
                     >
                       <button
@@ -643,7 +662,7 @@ export default function Dashboard({
                 selectedDayTasks.map(task => (
                   <div
                     key={task.id}
-                    className="flex items-center gap-3 rounded-2xl px-3 py-2.5 hover:bg-black/[0.02] cursor-pointer"
+                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-black/[0.02] cursor-pointer"
                     onClick={() => onNavigate('tasks')}
                   >
                     <button
@@ -698,7 +717,7 @@ export default function Dashboard({
                 <button
                   type="button"
                   onClick={() => onNavigate('notes', continueNotebook.id)}
-                  className="w-full flex items-center gap-4 rounded-2xl border border-black/[0.06] bg-[#FAFAFA] p-4 text-left hover:bg-black/[0.02] transition-colors"
+                  className="w-full flex items-center gap-4 rounded-xl border border-black/[0.06] bg-[#FAFAFA] p-4 text-left hover:bg-black/[0.02] transition-colors"
                 >
                   <div
                     className="w-12 h-14 rounded-xl shrink-0 flex items-center justify-center text-xl shadow-sm"
@@ -729,7 +748,7 @@ export default function Dashboard({
                           <button
                             type="button"
                             onClick={() => onNavigate('notes', nb.id)}
-                            className="w-full flex items-center gap-3 rounded-2xl px-3 py-2.5 hover:bg-black/[0.02] text-left"
+                            className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-black/[0.02] text-left"
                           >
                             <span
                               className="w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0"
@@ -757,7 +776,7 @@ export default function Dashboard({
                         <button
                           type="button"
                           onClick={() => onNavigate('notes')}
-                          className="w-full flex items-start gap-3 rounded-2xl px-3 py-2.5 hover:bg-black/[0.02] text-left"
+                          className="w-full flex items-start gap-3 rounded-xl px-3 py-2.5 hover:bg-black/[0.02] text-left"
                         >
                           <StickyNote size={16} className="text-[#9CA3AF] shrink-0 mt-0.5" />
                           <div className="min-w-0 flex-1">
@@ -783,7 +802,7 @@ export default function Dashboard({
                         <button
                           type="button"
                           onClick={() => onNavigate('tasks')}
-                          className="w-full flex items-center justify-between gap-3 rounded-2xl px-3 py-2.5 hover:bg-black/[0.02] text-left"
+                          className="w-full flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 hover:bg-black/[0.02] text-left"
                         >
                           <span className="text-[14px] font-semibold text-[#111827] truncate">{task.title}</span>
                           <span className="text-[12px] text-[#6B7280] shrink-0">{formatShortDate(task.dueDate)}</span>
@@ -814,7 +833,7 @@ export default function Dashboard({
       </div>
 
       {/* Right: Pin Wall — visible on xl+ */}
-      <div className="hidden xl:flex flex-col w-[340px] shrink-0 border-l border-black/[0.06] bg-[#FAFAFA]">
+      <div className="hidden xl:flex flex-col w-[340px] shrink-0 border-l border-black/[0.06] bg-white">
         <PinWall />
       </div>
     </div>
