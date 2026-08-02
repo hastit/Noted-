@@ -19,7 +19,6 @@ import Calendar from './components/Calendar';
 import Settings from './components/Settings';
 import AuthScreen from './components/AuthScreen';
 import ResetPasswordScreen from './components/ResetPasswordScreen';
-import MobileBottomNav from './components/MobileBottomNav';
 import {LanguageProvider, useLanguage} from './context/LanguageContext';
 import {AuthProvider, useAuth} from './context/AuthContext';
 import {PomodoroProvider, usePomodoro} from './context/PomodoroContext';
@@ -380,36 +379,46 @@ function AuthenticatedApp() {
         </div>
       )}
 
-      <header className={`${notesImmersive ? 'hidden' : 'hidden md:grid'} h-16 sm:h-20 shrink-0 z-50 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-3 px-3 sm:px-5 lg:px-8 min-w-0 ${isNotesTab ? 'bg-white border-b border-black/[0.06]' : ''}`}>
+      {/* Web chrome: page tabs always live in the top bar (never a mobile bottom tab bar). */}
+      <header
+        className={`${notesImmersive ? 'hidden' : 'grid'} h-14 sm:h-16 lg:h-[4.5rem] shrink-0 z-50 grid-cols-[minmax(0,auto)_minmax(0,1fr)_minmax(0,auto)] sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-3 px-3 sm:px-5 lg:px-8 min-w-0 border-b border-black/[0.06] ${
+          isNotesTab ? 'bg-white' : 'bg-[#fdfdfd]/95 backdrop-blur-md'
+        }`}
+      >
         <div className="flex items-center gap-2 sm:gap-3 min-w-0 justify-self-start">
-          <div className="w-8 h-8 shrink-0 rounded-lg bg-black flex items-center justify-center">
-            <div className="w-4 h-4 rounded-sm bg-white rotate-45" />
+          <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-lg bg-black flex items-center justify-center">
+            <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-sm bg-white rotate-45" />
           </div>
-          <span className="font-display font-bold text-lg sm:text-xl tracking-tight truncate">Noted</span>
+          <span className="font-display font-bold text-base sm:text-lg lg:text-xl tracking-tight truncate">Noted</span>
         </div>
 
-        <nav className="min-w-0 justify-self-center max-w-full overflow-x-auto overflow-y-hidden [scrollbar-width:thin] py-0.5">
-          <div className="relative flex w-max min-w-0 max-w-full items-center gap-0.5 sm:gap-1 bg-black/5 p-1 rounded-2xl backdrop-blur-md">
+        <nav
+          className="min-w-0 justify-self-stretch sm:justify-self-center max-w-full overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden py-0.5"
+          aria-label="Primary"
+        >
+          <div className="relative flex w-max min-w-0 max-w-full items-center gap-0.5 sm:gap-1 bg-black/[0.045] p-1 rounded-xl sm:rounded-2xl mx-auto">
             {tabs.map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
+                  type="button"
                   onClick={() => setActiveTab(tab.id as TabType)}
-                  className={`relative flex items-center gap-1.5 sm:gap-2 shrink-0 px-2 sm:px-3 lg:px-4 py-2 rounded-xl transition-all duration-300 ${
+                  className={`relative flex items-center gap-1.5 sm:gap-2 shrink-0 px-2.5 sm:px-3 lg:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl transition-all duration-300 ${
                     isActive ? 'text-black' : 'text-black/40 hover:text-black/60'
                   }`}
                 >
                   {isActive && (
                     <motion.div
                       layoutId="nav-beam"
-                      className="absolute inset-0 bg-white shadow-sm rounded-xl z-0"
+                      className="absolute inset-0 bg-white shadow-sm rounded-lg sm:rounded-xl z-0"
                       transition={{type: 'spring', bounce: 0.2, duration: 0.6}}
                     />
                   )}
-                  <Icon size={18} className="relative z-10 shrink-0" />
-                  <span className="relative z-10 text-xs sm:text-sm font-medium hidden md:inline max-w-[5.5rem] lg:max-w-none truncate">
+                  <Icon size={16} className="relative z-10 shrink-0 sm:hidden" />
+                  <Icon size={18} className="relative z-10 shrink-0 hidden sm:block" />
+                  <span className="relative z-10 text-[11px] sm:text-xs lg:text-sm font-medium max-w-[4.75rem] sm:max-w-[5.5rem] lg:max-w-none truncate">
                     {tab.label}
                   </span>
                 </button>
@@ -418,24 +427,14 @@ function AuthenticatedApp() {
           </div>
         </nav>
 
-        <div aria-hidden="true" className="w-full" />
-
-      </header>
-
-      <header className={`${notesImmersive ? 'hidden' : 'md:hidden flex'} h-12 max-h-12 shrink-0 z-50 items-center justify-between gap-2 px-3 min-w-0 ${isNotesTab ? 'bg-white border-b border-black/[0.06]' : 'bg-[#f8f9fa]/90 backdrop-blur-sm'}`}>
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-7 h-7 shrink-0 rounded-md bg-black flex items-center justify-center">
-            <div className="w-3 h-3 rounded-sm bg-white rotate-45" />
-          </div>
-          <span className="font-display font-bold text-[15px] tracking-tight truncate">Noted</span>
-        </div>
+        <div aria-hidden="true" className="hidden sm:block w-full" />
       </header>
 
       <main
         className={`flex-1 min-h-0 min-w-0 flex flex-col relative z-10 ${
           notesImmersive || isNotesTab
-            ? 'p-0 max-md:pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))]'
-            : 'px-3 sm:px-5 lg:px-8 max-md:px-3 max-md:pt-2 md:pt-6 lg:pt-7 pb-4 sm:pb-6 lg:pb-8 max-md:pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))]'
+            ? 'p-0'
+            : 'px-4 sm:px-6 lg:px-10 pt-5 sm:pt-7 lg:pt-8 pb-6 sm:pb-8 lg:pb-10'
         } overflow-hidden`}
       >
         <AnimatePresence mode="wait">
@@ -510,8 +509,6 @@ function AuthenticatedApp() {
           </motion.div>
         </AnimatePresence>
       </main>
-
-      <MobileBottomNav active={activeTab} onChange={setActiveTab} solidWhite={isNotesTab} />
 
       {/* Floating mini-timer — visible on all tabs except dashboard */}
       {activeTab !== 'dashboard' && activeTab !== 'notes' && <FloatingTimer onNavigate={() => setActiveTab('dashboard')} />}
