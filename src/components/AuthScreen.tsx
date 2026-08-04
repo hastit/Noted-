@@ -470,8 +470,22 @@ export default function AuthScreen({initialMode = 'login'}: AuthScreenProps) {
 
                   <motion.p variants={staggerItem} className="text-center text-[11px] leading-relaxed text-neutral-400">
                     By signing up you agree to our{' '}
-                    <a href="#" className="font-medium text-neutral-500 underline-offset-2 hover:underline">
-                      Terms of Service
+                    <a
+                      href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-neutral-500 underline-offset-2 hover:underline"
+                    >
+                      Terms of Use
+                    </a>
+                    {' '}and{' '}
+                    <a
+                      href="https://noted-phi-sand.vercel.app/privacy"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-neutral-500 underline-offset-2 hover:underline"
+                    >
+                      Privacy Policy
                     </a>
                     .
                   </motion.p>
