@@ -1,9 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Shield, Globe, LogOut, Camera, Mail, Lock, Check, Send, Bell, Database, Download, AlertTriangle, Trash2 } from 'lucide-react';
+import { User, Shield, Globe, LogOut, Camera, Mail, Lock, Check, Send, Bell, Database, Download, AlertTriangle, Trash2, ExternalLink, FileText, Scale } from 'lucide-react';
 import { useLanguage, Language } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { getDisplayName, initialsFromDisplayName } from '../lib/displayName';
+
+/** Public legal URLs — also used for App Store Connect / Guideline 3.1.2 compliance. */
+const PRIVACY_POLICY_URL = 'https://noted-phi-sand.vercel.app/privacy';
+const TERMS_OF_USE_URL = 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
 
 type SettingsProps = {
   dashboardTheme?: string;
@@ -534,6 +538,38 @@ export default function Settings({ dashboardTheme, onDashboardThemeChange }: Set
                     <p className="text-[10px] sm:text-[11px] text-black/35 leading-snug">{item.desc}</p>
                   </div>
                 ))}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <a
+                  href={PRIVACY_POLICY_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-4 rounded-2xl border border-black/[0.08] bg-black/[0.01] hover:bg-black/[0.04] hover:border-black/[0.14] transition-all text-left group"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-black/[0.05] flex items-center justify-center shrink-0 group-hover:bg-black/[0.08] transition-colors">
+                    <FileText size={17} className="text-black/55" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-[13px] sm:text-sm">Privacy Policy</p>
+                    <p className="text-[10px] sm:text-[11px] text-black/35 mt-0.5">How we collect and use your data</p>
+                  </div>
+                  <ExternalLink size={14} className="text-black/30 shrink-0" aria-hidden />
+                </a>
+                <a
+                  href={TERMS_OF_USE_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-4 rounded-2xl border border-black/[0.08] bg-black/[0.01] hover:bg-black/[0.04] hover:border-black/[0.14] transition-all text-left group"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-black/[0.05] flex items-center justify-center shrink-0 group-hover:bg-black/[0.08] transition-colors">
+                    <Scale size={17} className="text-black/55" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-[13px] sm:text-sm">Terms of Use</p>
+                    <p className="text-[10px] sm:text-[11px] text-black/35 mt-0.5">License agreement (EULA)</p>
+                  </div>
+                  <ExternalLink size={14} className="text-black/30 shrink-0" aria-hidden />
+                </a>
               </div>
             </section>
 
